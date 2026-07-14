@@ -1,12 +1,15 @@
 import time
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.database import get_db
 from app import models, schemas
 from app.dependencies import get_current_user
 from app.config import PAYGATE_AUTH_TOKEN
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
 
 
