@@ -1,0 +1,136 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, Arial, sans-serif;
+    background: #0f1729;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 480px;
+    margin: 40px auto;
+}
+
+.card {
+    background: #1a2740;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+h1 {
+    font-size: 22px;
+    margin-top: 0;
+}
+
+h2 {
+    font-size: 17px;
+    color: #94a3b8;
+}
+
+label {
+    display: block;
+    margin: 12px 0 6px;
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #0f1729;
+    color: white;
+    font-size: 15px;
+}
+
+button {
+    width: 100%;
+    margin-top: 18px;
+    padding: 12px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+button:hover {
+    background: #2563eb;
+}
+
+button.secondary {
+    background: #334155;
+}
+
+button.danger {
+    background: #dc2626;
+}
+
+.erreur {
+    color: #f87171;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.succes {
+    color: #4ade80;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.router-item {
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge.actif {
+    background: #14532d;
+    color: #4ade80;
+}
+
+.badge.inactif {
+    background: #450a0a;
+    color: #f87171;
+}
+
+pre {
+    background: #0f1729;
+    padding: 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.topbar button {
+    width: auto;
+    padding: 8px 16px;
+}

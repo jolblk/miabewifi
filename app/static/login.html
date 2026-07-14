@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIABEWIFI - Connexion</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>MIABEWIFI</h1>
+            <h2 id="form-title">Connexion</h2>
+
+            <form id="login-form">
+                <label>Email</label>
+                <input type="email" id="login-email" required>
+                <label>Mot de passe</label>
+                <input type="password" id="login-password" required>
+                <button type="submit">Se connecter</button>
+            </form>
+
+            <form id="register-form" style="display:none;">
+                <label>Nom</label>
+                <input type="text" id="register-nom" required>
+                <label>Email</label>
+                <input type="email" id="register-email" required>
+                <label>Mot de passe</label>
+                <input type="password" id="register-password" required>
+                <button type="submit">Créer un compte</button>
+            </form>
+
+            <p id="message"></p>
+            <button class="secondary" id="toggle-form" type="button">Créer un compte à la place</button>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>

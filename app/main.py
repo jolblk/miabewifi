@@ -8,6 +8,9 @@ from app.database import engine, Base
 from app import models
 from app.routers import auth, routers_management, wallet
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
 Base.metadata.create_all(bind=engine)
 
 limiter = Limiter(key_func=get_remote_address)
@@ -28,7 +31,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(routers_management.router)
 app.include_router(wallet.router)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")
 def read_root():
-    return {"message": "MIABEWIFI - Backend fonctionnel !"}
+    return RedirectResponse(url="/static/login.html")

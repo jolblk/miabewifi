@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIABEWIFI - Tableau de bord</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="topbar">
+            <h1>MIABEWIFI</h1>
+            <button class="secondary" id="logout-btn">Déconnexion</button>
+        </div>
+
+        <div class="card">
+            <h2>Portefeuille</h2>
+            <p style="font-size:24px; font-weight:bold;" id="solde-affiche">-- FCFA</p>
+            <label>Numéro de téléphone</label>
+            <input type="tel" id="recharge-phone" placeholder="90000000">
+            <label>Réseau</label>
+            <select id="recharge-network">
+                <option value="FLOOZ">Flooz</option>
+                <option value="TMONEY">T-Money</option>
+            </select>
+            <label>Montant (FCFA)</label>
+            <input type="number" id="recharge-montant" placeholder="1000">
+            <button id="recharge-btn">Recharger</button>
+            <p id="recharge-message"></p>
+        </div>
+
+        <div class="card">
+            <h2>Ajouter un routeur</h2>
+            <label>Nom du routeur</label>
+            <input type="text" id="new-router-nom" placeholder="ex: agence-cocody">
+            <button id="create-router-btn">Créer</button>
+            <p id="create-router-message"></p>
+        </div>
+
+        <div class="card">
+            <h2>Mes routeurs</h2>
+            <div id="routers-list">Chargement...</div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
