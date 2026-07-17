@@ -85,3 +85,26 @@ async def paygate_webhook(payload: dict, db: Session = Depends(get_db)):
 @router.get("/solde")
 def get_solde(current_user: models.User = Depends(get_current_user)):
     return {"solde": current_user.solde}
+
+@router.get("/transactions")
+def get_transactions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transactions = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == current_user.id)
+        .order_by(models.Transaction.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "montant": t.montant,
+            "methode": t.methode,
+            "statut": t.statut,
+            "type": t.type,
+            "created_at": t.created_at,
+        }
+        for t in transactions
+    ]

@@ -55,3 +55,4 @@ class Transaction(Base):
     statut = Column(String, default="en_attente")
     identifier = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    type = Column(String, default="recharge")  # "recharge" ou "debit"

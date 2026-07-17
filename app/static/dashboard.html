@@ -8,42 +8,231 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body>
-    <div class="container">
-        <div class="topbar">
-            <h1>MIABEWIFI</h1>
-            <button class="secondary" id="logout-btn">Déconnexion</button>
-        </div>
+<body class="dashboard-body">
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="logo-badge">
+                <div class="icon">M</div>
+                <div>
+                    <span>MIABEWIFI</span>
+                    <span class="sub">CLOUD</span>
+                </div>
+            </div>
 
-        <div class="card">
-            <h2>Portefeuille</h2>
-            <p style="font-size:24px; font-weight:bold;" id="solde-affiche">-- FCFA</p>
-            <label>Numéro de téléphone</label>
-            <input type="tel" id="recharge-phone" placeholder="90000000">
-            <label>Réseau</label>
-            <select id="recharge-network">
-                <option value="FLOOZ">Flooz</option>
-                <option value="TMONEY">T-Money</option>
-            </select>
-            <label>Montant (FCFA)</label>
-            <input type="number" id="recharge-montant" placeholder="1000">
-            <button id="recharge-btn">Recharger</button>
-            <p id="recharge-message"></p>
-        </div>
+            <div class="nav-section-title">Pilotage</div>
+            <a class="nav-link" data-target="dashboard" onclick="allerA('dashboard')"><span class="icon">▦</span> Tableau de
+                bord</a>
+            <a class="nav-link" data-target="routers" onclick="allerA('routers')"><span class="icon">📡</span> Routeurs</a>
+            <a class="nav-link" data-target="wallet" onclick="allerA('wallet')"><span class="icon">💳</span> Mon portefeuille</a>
+            
+            <div class="nav-section-title">Mon compte</div>
+            <a class="nav-link" data-target="profile" onclick="allerA('profile')"><span class="icon">🔒</span> Mon profil</a>
+            <a class="nav-link" data-target="support" onclick="allerA('support')"><span class="icon">❔</span> Support</a>
 
-        <div class="card">
-            <h2>Ajouter un routeur</h2>
-            <label>Nom du routeur</label>
-            <input type="text" id="new-router-nom" placeholder="ex: agence-cocody">
-            <button id="create-router-btn">Créer</button>
-            <p id="create-router-message"></p>
-        </div>
+            <div class="sidebar-footer">
+                <div class="avatar" id="user-avatar">?</div>
+                <div class="info">
+                    <div class="name" id="user-name">Chargement...</div>
+                    <div class="role">Opérateur</div>
+                </div>
+                <button id="logout-btn" title="Déconnexion">⏻</button>
+            </div>
+        </aside>
 
-        <div class="card">
-            <h2>Mes routeurs</h2>
-            <div id="routers-list">Chargement...</div>
+        <div class="main-area">
+            <div class="topbar">
+                <span class="breadcrumb"><strong>MIABEWIFI</strong> · Tableau de bord</span>
+                <div class="search-bar">🔍 Rechercher un routeur...</div>
+                <div class="topbar-icon-btn">🔔</div>
+            </div>
+
+            <div class="page-content">
+            
+                <!-- VUE : Tableau de bord -->
+                <div class="view active" data-view="dashboard">
+                    <h1>Mon compte</h1>
+                    <p class="greeting">Bonjour <strong id="greeting-name">...</strong>, voici l'état de vos routeurs.</p>
+            
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="label">Solde portefeuille</div>
+                            <div class="big-number" id="solde-affiche">-- <small>FCFA</small></div>
+                            <div class="sub-text">Rechargez pour activer des packs</div>
+                            <button class="secondary" onclick="allerA('wallet')">💳 Recharger</button>
+                        </div>
+            
+                        <div class="stat-card">
+                            <div class="label">Mes routeurs</div>
+                            <div class="big-number" id="routers-count">0<small>/0</small></div>
+                            <div class="sub-text" id="routers-count-text">Aucun routeur pour le moment</div>
+                        </div>
+            
+                        <div class="stat-card">
+                            <div class="label">Prochaine échéance</div>
+                            <div class="big-number" style="font-size:18px;" id="next-deadline">Aucune licence active</div>
+                            <div class="sub-text">Activez un pack pour démarrer un routeur</div>
+                        </div>
+                    </div>
+            
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Statut de mes routeurs <span class="count-pill" id="routers-status-count">0</span></h3>
+                            <button class="new-router-btn" onclick="allerA('routers')">Gérer →</button>
+                        </div>
+                        <div id="routers-list-preview">
+                            <p class="empty-hint">Chargement...</p>
+                        </div>
+                    </div>
+            
+                    <div class="two-col">
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h3>Échéances à venir <span class="count-pill" id="deadlines-count">0</span></h3>
+                            </div>
+                            <div id="deadlines-list">
+                                <p class="empty-hint">✓ Aucune licence n'expire dans les 7 prochains jours.</p>
+                            </div>
+                        </div>
+            
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h3>À activer / à surveiller <span class="count-pill" id="watch-count">0</span></h3>
+                            </div>
+                            <div id="watch-list">
+                                <p class="empty-hint">✓ Tous vos routeurs sont opérationnels.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            
+                <!-- VUE : Routeurs -->
+                <div class="view" data-view="routers">
+                    <h1>Mes routeurs</h1>
+                    <p class="greeting">Gérez vos routeurs MikroTik et leurs accès.</p>
+            
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Ajouter un routeur</h3>
+                        </div>
+                        <label>Nom du routeur</label>
+                        <div class="input-wrapper"><input type="text" id="new-router-nom" placeholder="ex: agence-cocody"></div>
+                        <button id="create-router-btn">Créer</button>
+                        <p id="create-router-message"></p>
+                    </div>
+            
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Tous mes routeurs <span class="count-pill" id="routers-status-count-2">0</span></h3>
+                        </div>
+                        <div id="routers-list">
+                            <p class="empty-hint">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
+            
+                <!-- VUE : Portefeuille -->
+                <div class="view" data-view="wallet">
+                    <div class="section-header" style="margin-bottom:24px;">
+                        <div>
+                            <h1>Mon portefeuille</h1>
+                            <p class="greeting" style="margin:0;">Solde et historique. Débité à chaque activation ou renouvellement.</p>
+                        </div>
+                        <button class="new-router-btn" onclick="document.getElementById('recharge-panel').style.display='block'">+
+                            Recharger via PayGate</button>
+                    </div>
+                
+                    <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
+                        <div class="stat-card">
+                            <div class="label">Solde courant</div>
+                            <div class="big-number" id="w-solde">0 <small>FCFA</small></div>
+                            <div class="sub-text">disponible</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Rechargé (30j)</div>
+                            <div class="big-number" id="w-recharge-30j" style="color:#16a34a;">+0 <small>FCFA</small></div>
+                            <div class="sub-text" id="w-recharge-count">0 recharges</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Débité (30j)</div>
+                            <div class="big-number" id="w-debit-30j" style="color:#dc2626;">-0 <small>FCFA</small></div>
+                            <div class="sub-text" id="w-debit-count">0 licence(s) activée(s)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Frais PayGate (30j)</div>
+                            <div class="big-number" id="w-frais-30j">~0 <small>FCFA</small></div>
+                            <div class="sub-text">~3,5% par transaction</div>
+                        </div>
+                    </div>
+                
+                    <div class="section-card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Pack 3 mois
+                            (référence)</span>
+                        <strong style="font-size:18px;">6 000 FCFA</strong>
+                        <span class="count-pill">STANDARD</span>
+                    </div>
+                
+                    <div id="recharge-panel" style="display:none;" class="section-card">
+                        <div class="section-header">
+                            <h3>Recharger le portefeuille</h3>
+                        </div>
+                        <label>Numéro de téléphone</label>
+                        <div class="input-wrapper"><input type="tel" id="recharge-phone" placeholder="90000000"></div>
+                        <label>Réseau</label>
+                        <select id="recharge-network">
+                            <option value="FLOOZ">Flooz</option>
+                            <option value="TMONEY">T-Money</option>
+                        </select>
+                        <label>Montant (FCFA)</label>
+                        <div class="input-wrapper"><input type="number" id="recharge-montant" placeholder="1000"></div>
+                        <button id="recharge-btn">Envoyer la demande</button>
+                        <p id="recharge-message"></p>
+                    </div>
+                
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>Historique des transactions <span id="tx-count-label"
+                                    style="font-weight:400; color:var(--text-muted); font-size:13px;">0 sur 0 récentes</span></h3>
+                            <button class="secondary" id="export-csv-btn" style="width:auto; padding:9px 16px; font-size:13px;">⬇
+                                Exporter CSV</button>
+                        </div>
+                
+                        <div id="transactions-list">
+                            <div style="text-align:center; padding:50px 0;">
+                                <div
+                                    style="width:56px;height:56px;background:#fce7f3;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:22px;">
+                                    💳</div>
+                                <p style="font-weight:700; margin:0 0 4px;">Aucune transaction pour l'instant</p>
+                                <p class="sub-text">Rechargez votre portefeuille pour démarrer.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            
+                <!-- VUE : Profil -->
+                <div class="view" data-view="profile">
+                    <h1>Mon profil</h1>
+                    <div class="section-card" style="max-width:420px;">
+                        <label>Nom</label>
+                        <p id="profile-nom" style="font-weight:700;">--</p>
+                        <label>Email</label>
+                        <p id="profile-email" style="font-weight:700;">--</p>
+                        <label>Membre depuis</label>
+                        <p id="profile-date" style="font-weight:700;">--</p>
+                    </div>
+                </div>
+            
+                <!-- VUE : Support -->
+                <div class="view" data-view="support">
+                    <h1>Support</h1>
+                    <div class="section-card">
+                        <p>Besoin d'aide ? Contacte-nous à <strong>support@miabewifi.com</strong></p>
+                    </div>
+                </div>
+            
+            </div>
         </div>
     </div>
+
     <script src="app.js"></script>
 </body>
 

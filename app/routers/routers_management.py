@@ -185,6 +185,16 @@ def activer_pack(
     )
     db_router.subscription_expires_at = base_date + timedelta(days=pack["duree_jours"])
 
+    debit_transaction = models.Transaction(
+        user_id=current_user.id,
+        montant=pack["montant"],
+        methode="PACK",
+        statut="confirme",
+        type="debit",
+        identifier=f"pack-{router_id}-{int(datetime.utcnow().timestamp() * 1000)}",
+    )
+    db.add(debit_transaction)
+
     db.commit()
     db.refresh(db_router)
 
