@@ -379,6 +379,119 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         a.click();
     });
 
+    let packSelectionne = null;
+    let soldeActuel = 0;
+
+    window.ouvrirModalPacks = async () => {
+        document.getElementById('packs-modal').style.display = 'flex';
+        retourListePacks();
+
+        const [packsRes, soldeRes] = await Promise.all([
+            apiFetch('/packs/'),
+            apiFetch('/wallet/solde'),
+        ]);
+        if (!packsRes || !soldeRes) return;
+
+        const packs = await packsRes.json();
+        const solde = await soldeRes.json();
+        soldeActuel = solde.solde;
+
+        document.getElementById('packs-step-list').innerHTML = packs.map(p => `
+      <div class="router-item">
+        <strong>${p.label}</strong>
+        <p style="font-size:20px; font-weight:800; margin:6px 0;">${p.montant} FCFA</p>
+        <button onclick='choisirPack(${JSON.stringify(p)})'>Souscrire</button>
+      </div>
+    `).join('');
+    };
+
+    window.fermerModalPacks = () => {
+        document.getElementById('packs-modal').style.display = 'none';
+    };
+
+    window.retourListePacks = () => {
+        document.getElementById('packs-step-list').style.display = 'block';
+        document.getElementById('packs-step-router').style.display = 'none';
+        document.getElementById('packs-step-recharge').style.display = 'none';
+    };
+
+    window.choisirPack = async (pack) => {
+        packSelectionne = pack;
+
+        const res = await apiFetch('/routers/');
+        if (!res) return;
+        const routeurs = await res.json();
+
+        if (routeurs.length === 0) {
+            alert('Créez d\'abord un routeur avant d\'activer un pack.');
+            return;
+        }
+
+        document.getElementById('pack-selectionne-label').textContent = `${pack.label} — ${pack.montant} FCFA`;
+        document.getElementById('pack-router-select').innerHTML = routeurs.map(r => `<option value="${r.id}">${r.nom}</option>`).join('');
+
+        document.getElementById('packs-step-list').style.display = 'none';
+        document.getElementById('packs-step-router').style.display = 'block';
+    };
+
+    window.confirmerActivation = async () => {
+        const routerId = document.getElementById('pack-router-select').value;
+        const messageEl = document.getElementById('pack-activation-message');
+
+        if (soldeActuel < packSelectionne.montant) {
+            document.getElementById('packs-step-router').style.display = 'none';
+            document.getElementById('packs-step-recharge').style.display = 'block';
+            return;
+        }
+
+        const res = await apiFetch(`/routers/${routerId}/activer-pack`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pack_id: packSelectionne.id }),
+        });
+        if (!res) return;
+        const data = await res.json();
+
+        if (res.ok) {
+            messageEl.className = 'succes';
+            messageEl.textContent = data.message;
+            chargerSolde();
+            chargerRouteurs();
+            setTimeout(fermerModalPacks, 1200);
+        } else {
+            if (data.detail && data.detail.includes('Solde insuffisant')) {
+                document.getElementById('packs-step-router').style.display = 'none';
+                document.getElementById('packs-step-recharge').style.display = 'block';
+            } else {
+                messageEl.className = 'erreur';
+                messageEl.textContent = data.detail || 'Erreur.';
+            }
+        }
+    };
+
+    window.rechargerDepuisModal = async () => {
+        const messageEl = document.getElementById('modal-recharge-message');
+        const res = await apiFetch('/wallet/recharger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone_number: document.getElementById('modal-recharge-phone').value,
+                network: document.getElementById('modal-recharge-network').value,
+                montant: parseFloat(document.getElementById('modal-recharge-montant').value),
+            }),
+        });
+        if (!res) return;
+        const data = await res.json();
+
+        if (res.ok) {
+            messageEl.className = 'succes';
+            messageEl.textContent = data.message + ' Une fois confirmé, réessayez l\'activation.';
+        } else {
+            messageEl.className = 'erreur';
+            messageEl.textContent = data.detail || 'Erreur.';
+        }
+    };
+
     // --- Fonctions Admin ---
     async function chargerStats() {
         const res = await apiFetch('/admin/stats');
