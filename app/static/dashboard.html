@@ -20,15 +20,29 @@
             </div>
 
             <div class="nav-section-title">Pilotage</div>
-            <a class="nav-link" data-target="dashboard" onclick="allerA('dashboard')"><span class="icon">▦</span> Tableau de
+            <a class="nav-link" data-target="dashboard" onclick="allerA('dashboard')"><span class="icon">▦</span>
+                Tableau de
                 bord</a>
-            <a class="nav-link" data-target="routers" onclick="allerA('routers')"><span class="icon">📡</span> Routeurs</a>
-            <a class="nav-link" data-target="wallet" onclick="allerA('wallet')"><span class="icon">💳</span> Mon portefeuille</a>
-            
-            <div class="nav-section-title">Mon compte</div>
-            <a class="nav-link" data-target="profile" onclick="allerA('profile')"><span class="icon">🔒</span> Mon profil</a>
-            <a class="nav-link" data-target="support" onclick="allerA('support')"><span class="icon">❔</span> Support</a>
+            <a class="nav-link" data-target="routers" onclick="allerA('routers')"><span class="icon">📡</span>
+                Routeurs</a>
+            <a class="nav-link" data-target="wallet" onclick="allerA('wallet')"><span class="icon">💳</span> Mon
+                portefeuille</a>
 
+            <div class="nav-section-title">Mon compte</div>
+            <a class="nav-link" data-target="profile" onclick="allerA('profile')"><span class="icon">🔒</span> Mon
+                profil</a>
+            <a class="nav-link" data-target="support" onclick="allerA('support')"><span class="icon">❔</span>
+                Support</a>
+
+            <div class="nav-section-title" id="admin-section" style="display:none;">Administration</div>
+            <a class="nav-link" data-target="admin-overview" onclick="allerA('admin-overview')" id="admin-link-1"
+                style="display:none;"><span class="icon">▦</span> Vue d'ensemble</a>
+            <a class="nav-link" data-target="admin-users" onclick="allerA('admin-users')" id="admin-link-2"
+                style="display:none;"><span class="icon">👥</span> Utilisateurs</a>
+            <a class="nav-link" data-target="admin-routers" onclick="allerA('admin-routers')" id="admin-link-3"
+                style="display:none;"><span class="icon">📡</span> Tous les routeurs</a>
+            <a class="nav-link" data-target="admin-tx" onclick="allerA('admin-tx')" id="admin-link-4"
+                style="display:none;"><span class="icon">💳</span> Transactions (admin)</a>
             <div class="sidebar-footer">
                 <div class="avatar" id="user-avatar">?</div>
                 <div class="info">
@@ -42,17 +56,36 @@
         <div class="main-area">
             <div class="topbar">
                 <span class="breadcrumb"><strong>MIABEWIFI</strong> · Tableau de bord</span>
-                <div class="search-bar">🔍 Rechercher un routeur...</div>
-                <div class="topbar-icon-btn">🔔</div>
+                <div class="search-bar">
+                    🔍 <input type="text" id="search-input" placeholder="Rechercher un routeur, utilisateur, log..."
+                        style="border:none; background:none; outline:none; width:100%; font-size:13px; color:var(--text-dark);">
+                </div>
+                <div class="topbar-icon-btn" id="notif-bell" style="position:relative;">
+                    🔔
+                    <span id="notif-badge"
+                        style="display:none; position:absolute; top:-4px; right:-4px; background:#dc2626; color:white; font-size:10px; font-weight:700; border-radius:20px; padding:1px 5px; min-width:16px; text-align:center;">0</span>
+                </div>
+                <div id="notif-panel"
+                    style="display:none; position:fixed; top:64px; right:32px; width:360px; max-height:420px; overflow-y:auto; background:white; border:1px solid var(--border); border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,0.15); z-index:100;">
+                    <div
+                        style="padding:14px 16px; border-bottom:1px solid var(--border); font-weight:700; font-size:14px;">
+                        Notifications</div>
+                    <div id="notif-list"></div>
+                </div>
+
             </div>
 
             <div class="page-content">
-            
+
                 <!-- VUE : Tableau de bord -->
                 <div class="view active" data-view="dashboard">
                     <h1>Mon compte</h1>
-                    <p class="greeting">Bonjour <strong id="greeting-name">...</strong>, voici l'état de vos routeurs.</p>
-            
+                    <p class="greeting">Bonjour <strong id="greeting-name">...</strong>, voici l'état de vos routeurs.
+                    </p>
+
+                    <button class="new-router-btn" style="margin-bottom:20px;" onclick="ouvrirModalPacks()">📦 Voir les
+                        abonnements</button>
+
                     <div class="stats-row">
                         <div class="stat-card">
                             <div class="label">Solde portefeuille</div>
@@ -60,20 +93,21 @@
                             <div class="sub-text">Rechargez pour activer des packs</div>
                             <button class="secondary" onclick="allerA('wallet')">💳 Recharger</button>
                         </div>
-            
+
                         <div class="stat-card">
                             <div class="label">Mes routeurs</div>
                             <div class="big-number" id="routers-count">0<small>/0</small></div>
                             <div class="sub-text" id="routers-count-text">Aucun routeur pour le moment</div>
                         </div>
-            
+
                         <div class="stat-card">
                             <div class="label">Prochaine échéance</div>
-                            <div class="big-number" style="font-size:18px;" id="next-deadline">Aucune licence active</div>
+                            <div class="big-number" style="font-size:18px;" id="next-deadline">Aucune licence active
+                            </div>
                             <div class="sub-text">Activez un pack pour démarrer un routeur</div>
                         </div>
                     </div>
-            
+
                     <div class="section-card">
                         <div class="section-header">
                             <h3>Statut de mes routeurs <span class="count-pill" id="routers-status-count">0</span></h3>
@@ -83,7 +117,7 @@
                             <p class="empty-hint">Chargement...</p>
                         </div>
                     </div>
-            
+
                     <div class="two-col">
                         <div class="section-card">
                             <div class="section-header">
@@ -93,7 +127,7 @@
                                 <p class="empty-hint">✓ Aucune licence n'expire dans les 7 prochains jours.</p>
                             </div>
                         </div>
-            
+
                         <div class="section-card">
                             <div class="section-header">
                                 <h3>À activer / à surveiller <span class="count-pill" id="watch-count">0</span></h3>
@@ -104,22 +138,23 @@
                         </div>
                     </div>
                 </div>
-            
+
                 <!-- VUE : Routeurs -->
                 <div class="view" data-view="routers">
                     <h1>Mes routeurs</h1>
                     <p class="greeting">Gérez vos routeurs MikroTik et leurs accès.</p>
-            
+
                     <div class="section-card">
                         <div class="section-header">
                             <h3>Ajouter un routeur</h3>
                         </div>
                         <label>Nom du routeur</label>
-                        <div class="input-wrapper"><input type="text" id="new-router-nom" placeholder="ex: agence-cocody"></div>
+                        <div class="input-wrapper"><input type="text" id="new-router-nom"
+                                placeholder="ex: agence-cocody"></div>
                         <button id="create-router-btn">Créer</button>
                         <p id="create-router-message"></p>
                     </div>
-            
+
                     <div class="section-card">
                         <div class="section-header">
                             <h3>Tous mes routeurs <span class="count-pill" id="routers-status-count-2">0</span></h3>
@@ -129,18 +164,20 @@
                         </div>
                     </div>
                 </div>
-            
+
                 <!-- VUE : Portefeuille -->
                 <div class="view" data-view="wallet">
                     <div class="section-header" style="margin-bottom:24px;">
                         <div>
                             <h1>Mon portefeuille</h1>
-                            <p class="greeting" style="margin:0;">Solde et historique. Débité à chaque activation ou renouvellement.</p>
+                            <p class="greeting" style="margin:0;">Solde et historique. Débité à chaque activation ou
+                                renouvellement.</p>
                         </div>
-                        <button class="new-router-btn" onclick="document.getElementById('recharge-panel').style.display='block'">+
+                        <button class="new-router-btn"
+                            onclick="document.getElementById('recharge-panel').style.display='block'">+
                             Recharger via PayGate</button>
                     </div>
-                
+
                     <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
                         <div class="stat-card">
                             <div class="label">Solde courant</div>
@@ -149,7 +186,8 @@
                         </div>
                         <div class="stat-card">
                             <div class="label">Rechargé (30j)</div>
-                            <div class="big-number" id="w-recharge-30j" style="color:#16a34a;">+0 <small>FCFA</small></div>
+                            <div class="big-number" id="w-recharge-30j" style="color:#16a34a;">+0 <small>FCFA</small>
+                            </div>
                             <div class="sub-text" id="w-recharge-count">0 recharges</div>
                         </div>
                         <div class="stat-card">
@@ -163,14 +201,16 @@
                             <div class="sub-text">~3,5% par transaction</div>
                         </div>
                     </div>
-                
+
                     <div class="section-card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Pack 3 mois
+                        <span
+                            style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Pack
+                            3 mois
                             (référence)</span>
                         <strong style="font-size:18px;">6 000 FCFA</strong>
                         <span class="count-pill">STANDARD</span>
                     </div>
-                
+
                     <div id="recharge-panel" style="display:none;" class="section-card">
                         <div class="section-header">
                             <h3>Recharger le portefeuille</h3>
@@ -187,15 +227,17 @@
                         <button id="recharge-btn">Envoyer la demande</button>
                         <p id="recharge-message"></p>
                     </div>
-                
+
                     <div class="section-card">
                         <div class="section-header">
                             <h3>Historique des transactions <span id="tx-count-label"
-                                    style="font-weight:400; color:var(--text-muted); font-size:13px;">0 sur 0 récentes</span></h3>
-                            <button class="secondary" id="export-csv-btn" style="width:auto; padding:9px 16px; font-size:13px;">⬇
+                                    style="font-weight:400; color:var(--text-muted); font-size:13px;">0 sur 0
+                                    récentes</span></h3>
+                            <button class="secondary" id="export-csv-btn"
+                                style="width:auto; padding:9px 16px; font-size:13px;">⬇
                                 Exporter CSV</button>
                         </div>
-                
+
                         <div id="transactions-list">
                             <div style="text-align:center; padding:50px 0;">
                                 <div
@@ -207,7 +249,7 @@
                         </div>
                     </div>
                 </div>
-            
+
                 <!-- VUE : Profil -->
                 <div class="view" data-view="profile">
                     <h1>Mon profil</h1>
@@ -220,7 +262,7 @@
                         <p id="profile-date" style="font-weight:700;">--</p>
                     </div>
                 </div>
-            
+
                 <!-- VUE : Support -->
                 <div class="view" data-view="support">
                     <h1>Support</h1>
@@ -228,11 +270,114 @@
                         <p>Besoin d'aide ? Contacte-nous à <strong>support@miabewifi.com</strong></p>
                     </div>
                 </div>
-            
+                <!-- VUE ADMIN : Vue d'ensemble -->
+                <div class="view" data-view="admin-overview">
+                    <h1>Vue d'ensemble (Admin)</h1>
+                    <p class="greeting">Supervision globale de la plateforme.</p>
+                    <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
+                        <div class="stat-card">
+                            <div class="label">Utilisateurs</div>
+                            <div class="big-number" id="s-users">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Routeurs (actifs/total)</div>
+                            <div class="big-number" id="s-routers">--<small>/--</small></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Revenus (30j)</div>
+                            <div class="big-number" id="s-revenus-30j">-- <small>FCFA</small></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Revenus (total)</div>
+                            <div class="big-number" id="s-revenus-total">-- <small>FCFA</small></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VUE ADMIN : Utilisateurs -->
+                <div class="view" data-view="admin-users">
+                    <h1>Utilisateurs</h1>
+                    <p class="greeting">Tous les comptes de la plateforme.</p>
+                    <div class="section-card">
+                        <div id="users-list">
+                            <p class="empty-hint">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VUE ADMIN : Tous les routeurs -->
+                <div class="view" data-view="admin-routers">
+                    <h1>Tous les routeurs</h1>
+                    <p class="greeting">Routeurs de tous les clients de la plateforme.</p>
+                    <div class="section-card">
+                        <div id="allrouters-list">
+                            <p class="empty-hint">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VUE ADMIN : Transactions -->
+                <div class="view" data-view="admin-tx">
+                    <h1>Transactions (admin)</h1>
+                    <p class="greeting">100 transactions les plus récentes, tous utilisateurs confondus.</p>
+                    <div class="section-card">
+                        <div id="alltx-list">
+                            <p class="empty-hint">Chargement...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+    <div id="packs-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Abonnements disponibles</h2>
+                <button class="modal-close" onclick="fermerModalPacks()">✕</button>
+            </div>
 
+            <div class="modal-body">
+
+                <div id="packs-step-list"></div>
+
+                <div id="packs-step-router" style="display:none;">
+                    <div class="modal-summary">
+                        <span class="name">Pack sélectionné</span>
+                        <span class="value" id="pack-selectionne-label"></span>
+                    </div>
+                    <label>Choisir le routeur</label>
+                    <select id="pack-router-select"></select>
+                    <button onclick="confirmerActivation()">Confirmer l'activation</button>
+                    <button class="back-link" onclick="retourListePacks()">← Retour aux abonnements</button>
+                    <p id="pack-activation-message"></p>
+                </div>
+
+                <div id="packs-step-recharge" style="display:none;">
+                    <div class="warning-banner">
+                        <span class="icon">⚠️</span>
+                        <div class="text">
+                            <strong>Solde insuffisant</strong>
+                            <span>Rechargez votre portefeuille pour activer ce pack.</span>
+                        </div>
+                    </div>
+                    <label>Numéro de téléphone</label>
+                    <div class="input-wrapper"><input type="tel" id="modal-recharge-phone" placeholder="90000000"></div>
+                    <label>Réseau</label>
+                    <select id="modal-recharge-network">
+                        <option value="FLOOZ">Flooz</option>
+                        <option value="TMONEY">T-Money</option>
+                    </select>
+                    <label>Montant (FCFA)</label>
+                    <div class="input-wrapper"><input type="number" id="modal-recharge-montant" placeholder="1000">
+                    </div>
+                    <button onclick="rechargerDepuisModal()">Envoyer la demande</button>
+                    <button class="back-link" onclick="retourListePacks()">← Retour aux abonnements</button>
+                    <p id="modal-recharge-message"></p>
+                </div>
+
+            </div>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 

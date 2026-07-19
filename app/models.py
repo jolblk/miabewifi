@@ -13,6 +13,7 @@ class User(Base):
     nom = Column(String, nullable=False)
     solde = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
+    role = Column(String, default="client")  # "client" ou "admin"
 
     routers = relationship("Router", back_populates="owner")
 

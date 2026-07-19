@@ -13,6 +13,7 @@ class UserOut(BaseModel):
     email: EmailStr
     nom: str
     solde: float
+    role: str
     created_at: datetime
 
     class Config:

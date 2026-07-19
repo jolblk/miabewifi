@@ -60,6 +60,13 @@ add address={wireguard_ip}/24 interface=wg-miabewifi
 
     return {"router": new_router, "config_script": config_script}
 
+@router.get("/", response_model=list[schemas.RouterOut])
+def list_routers(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return db.query(models.Router).filter(models.Router.owner_id == current_user.id).all()
+
 @router.get("/{router_id}", response_model=schemas.RouterOut)
 def get_router(
     router_id: int,
