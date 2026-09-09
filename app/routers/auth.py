@@ -5,6 +5,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.database import get_db
 from app import models, schemas, security
+from app.config import FRONTEND_URL
+from app.email_utils import send_reset_email
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentification"])
@@ -45,3 +47,34 @@ from app.dependencies import get_current_user
 @router.get("/me", response_model=schemas.UserOut)
 def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+
+    if user:
+        token = security.create_reset_token(user.id)
+        reset_link = f"{FRONTEND_URL}/reset-password.html?token={token}"
+        try:
+            send_reset_email(user.email, reset_link)
+        except Exception:
+            pass  # on ne révèle jamais une erreur d'envoi au client
+
+    # Réponse identique que le compte existe ou non, pour ne pas divulguer les emails inscrits
+    return {"message": "Si un compte existe avec cet email, un lien de réinitialisation vient d'être envoyé."}
+
+
+@router.post("/reset-password")
+def reset_password(payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    data = security.decode_reset_token(payload.token)
+    if not data:
+        raise HTTPException(status_code=400, detail="Lien invalide ou expiré.")
+
+    user = db.query(models.User).filter(models.User.id == int(data["sub"])).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Utilisateur introuvable.")
+
+    user.hashed_password = security.hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Mot de passe réinitialisé avec succès."}

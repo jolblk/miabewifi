@@ -91,18 +91,28 @@ label a {
     text-decoration: none;
 }
 
+.forgot-link {
+    text-align: right;
+    margin: 8px 0 0;
+}
+
+.forgot-link a {
+    color: var(--violet);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.forgot-link a:hover {
+    text-decoration: underline;
+}
+
 .input-wrapper {
     position: relative;
 }
 
-.input-wrapper .icon-left {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted);
-    pointer-events: none;
-    font-size: 16px;
+.input-wrapper input {
+    padding-left: 14px;
 }
 
 .input-wrapper .icon-right {
@@ -137,6 +147,27 @@ button.icon-right:hover {
     background: none;
     transform: translateY(-50%);
     filter: none;
+}
+
+.input-wrapper .password-toggle {
+    display: flex;
+    align-items: center;
+    width: 18px;
+}
+
+.input-wrapper .password-toggle svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-muted);
+    transition: stroke 0.2s;
+}
+
+.input-wrapper .password-toggle:hover svg {
+    stroke: var(--violet);
+}
+
+.input-wrapper .password-toggle .feather-eye-off {
+    display: none;
 }
 
 input[type="email"],

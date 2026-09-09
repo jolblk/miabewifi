@@ -25,6 +25,15 @@ class Token(BaseModel):
     token_type: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
 class RouterCreate(BaseModel):
     nom: str
 

@@ -4,6 +4,12 @@ const isLoginPage = document.getElementById('login-form') !== null;
 
 // --- Page de connexion / inscription ---
 if (isLoginPage) {
+    // Si une session existe déjà (token en localStorage via "Rester connecté",
+    // ou en sessionStorage pour l'onglet en cours), on saute directement au tableau de bord.
+    if (token()) {
+        window.location.href = 'dashboard.html';
+    }
+
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
     const toggleBtn = document.getElementById('toggle-form');
@@ -12,10 +18,66 @@ if (isLoginPage) {
     const subtitle = document.getElementById('form-subtitle');
     const message = document.getElementById('message');
 
-    document.getElementById('toggle-password-visibility').addEventListener('click', (e) => {
-        const input = document.getElementById('login-password');
-        input.type = input.type === 'password' ? 'text' : 'password';
-        e.target.textContent = input.type === 'password' ? '👁' : '🙈';
+    if (typeof feather !== 'undefined') feather.replace();
+
+    const passwordToggle = document.getElementById('toggle-password-visibility');
+    const eyeIcon = passwordToggle.querySelector('.feather-eye');
+    const eyeOffIcon = passwordToggle.querySelector('.feather-eye-off');
+    const passwordInput = document.getElementById('login-password');
+
+    passwordToggle.addEventListener('click', () => {
+        const isHidden = passwordInput.type === 'password';
+        passwordInput.type = isHidden ? 'text' : 'password';
+        eyeIcon.style.display = isHidden ? 'none' : 'block';
+        eyeOffIcon.style.display = isHidden ? 'block' : 'none';
+    });
+
+    // --- Mot de passe oublié ---
+    const forgotLink = document.getElementById('forgot-password-link');
+    const forgotModal = document.getElementById('forgot-modal');
+    const forgotModalClose = document.getElementById('forgot-modal-close');
+    const forgotEmailInput = document.getElementById('forgot-email');
+    const forgotSubmitBtn = document.getElementById('forgot-submit-btn');
+    const forgotMessage = document.getElementById('forgot-message');
+
+    forgotLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        forgotMessage.textContent = '';
+        forgotMessage.className = '';
+        forgotEmailInput.value = '';
+        forgotModal.style.display = 'flex';
+    });
+
+    forgotModalClose.addEventListener('click', () => {
+        forgotModal.style.display = 'none';
+    });
+
+    forgotModal.addEventListener('click', (e) => {
+        if (e.target === forgotModal) forgotModal.style.display = 'none';
+    });
+
+    forgotSubmitBtn.addEventListener('click', async () => {
+        const email = forgotEmailInput.value.trim();
+        if (!email) return;
+
+        forgotSubmitBtn.disabled = true;
+        forgotMessage.textContent = '';
+
+        try {
+            const res = await fetch(`${API}/auth/forgot-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            forgotMessage.className = 'succes';
+            forgotMessage.textContent = data.message || "Si un compte existe avec cet email, un lien de réinitialisation vient d'être envoyé.";
+        } catch (err) {
+            forgotMessage.className = 'erreur';
+            forgotMessage.textContent = 'Erreur de connexion au serveur.';
+        } finally {
+            forgotSubmitBtn.disabled = false;
+        }
     });
 
     toggleBtn.addEventListener('click', (e) => {
@@ -39,21 +101,27 @@ if (isLoginPage) {
         body.append('username', document.getElementById('login-email').value);
         body.append('password', document.getElementById('login-password').value);
 
-        const res = await fetch(`${API}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body,
-        });
-        const data = await res.json();
+        try {
+            const res = await fetch(`${API}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body,
+            });
+            const data = await res.json();
 
-        if (res.ok) {
-            const remember = document.getElementById('remember-me').checked;
-            const storage = remember ? localStorage : sessionStorage;
-            storage.setItem('miabewifi_token', data.access_token);
-            window.location.href = 'dashboard.html';
-        } else {
+            if (res.ok) {
+                const remember = document.getElementById('remember-me').checked;
+                const storage = remember ? localStorage : sessionStorage;
+                storage.setItem('miabewifi_token', data.access_token);
+                window.location.href = 'dashboard.html';
+            } else {
+                message.className = 'erreur';
+                message.textContent = data.detail || 'Erreur de connexion.';
+            }
+        } catch (err) {
             message.className = 'erreur';
-            message.textContent = data.detail || 'Erreur de connexion.';
+            message.textContent = 'Impossible de contacter le serveur. Vérifiez votre connexion.';
+            console.error('Erreur login:', err);
         }
     });
 
@@ -61,24 +129,30 @@ if (isLoginPage) {
         e.preventDefault();
         message.textContent = '';
 
-        const res = await fetch(`${API}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                nom: document.getElementById('register-nom').value,
-                email: document.getElementById('register-email').value,
-                password: document.getElementById('register-password').value,
-            }),
-        });
-        const data = await res.json();
+        try {
+            const res = await fetch(`${API}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nom: document.getElementById('register-nom').value,
+                    email: document.getElementById('register-email').value,
+                    password: document.getElementById('register-password').value,
+                }),
+            });
+            const data = await res.json();
 
-        if (res.ok) {
-            message.className = 'succes';
-            message.textContent = 'Compte créé ! Tu peux te connecter.';
-            toggleBtn.click();
-        } else {
+            if (res.ok) {
+                message.className = 'succes';
+                message.textContent = 'Compte créé ! Tu peux te connecter.';
+                toggleBtn.click();
+            } else {
+                message.className = 'erreur';
+                message.textContent = data.detail || 'Erreur lors de la création du compte.';
+            }
+        } catch (err) {
             message.className = 'erreur';
-            message.textContent = data.detail || 'Erreur lors de la création du compte.';
+            message.textContent = 'Impossible de contacter le serveur. Vérifiez votre connexion.';
+            console.error('Erreur register:', err);
         }
     });
 }
