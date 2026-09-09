@@ -186,6 +186,32 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         window.location.href = 'login.html';
     });
 
+    // --- Menu mobile (sidebar en tiroir) ---
+    const sidebarEl = document.querySelector('.sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const menuToggleBtn = document.getElementById('menu-toggle');
+
+    const ouvrirSidebar = () => {
+        sidebarEl.classList.add('open');
+        sidebarOverlay.classList.add('active');
+    };
+    const fermerSidebar = () => {
+        sidebarEl.classList.remove('open');
+        sidebarOverlay.classList.remove('active');
+    };
+
+    menuToggleBtn.addEventListener('click', () => {
+        sidebarEl.classList.contains('open') ? fermerSidebar() : ouvrirSidebar();
+    });
+    sidebarOverlay.addEventListener('click', fermerSidebar);
+
+    // Ferme le menu automatiquement après avoir choisi une section (mobile)
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 900) fermerSidebar();
+        });
+    });
+
     async function apiFetch(url, options = {}) {
         const res = await fetch(url, {
             ...options,
@@ -582,6 +608,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         if (!res) return;
         const users = await res.json();
         document.getElementById('users-list').innerHTML = `
+      <div class="table-scroll">
       <table class="admin-table">
         <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Solde</th><th>Routeurs</th><th>Inscrit le</th></tr></thead>
         <tbody>
@@ -596,7 +623,8 @@ if (!isLoginPage && document.getElementById('routers-list')) {
             </tr>
           `).join('')}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
     }
 
     async function chargerAllRouters() {
@@ -604,6 +632,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         if (!res) return;
         const routers = await res.json();
         document.getElementById('allrouters-list').innerHTML = `
+      <div class="table-scroll">
       <table class="admin-table">
         <thead><tr><th>Nom</th><th>Propriétaire</th><th>IP Tunnel</th><th>Statut</th><th>Connecté</th><th>Créé le</th></tr></thead>
         <tbody>
@@ -618,7 +647,8 @@ if (!isLoginPage && document.getElementById('routers-list')) {
             </tr>
           `).join('')}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
     }
 
     async function chargerAllTx() {
@@ -626,6 +656,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         if (!res) return;
         const txs = await res.json();
         document.getElementById('alltx-list').innerHTML = `
+      <div class="table-scroll">
       <table class="admin-table">
         <thead><tr><th>Utilisateur</th><th>Type</th><th>Montant</th><th>Méthode</th><th>Statut</th><th>Date</th></tr></thead>
         <tbody>
@@ -660,6 +691,23 @@ if (!isLoginPage && document.getElementById('routers-list')) {
             item.style.display = match ? (isRow ? 'table-row' : 'block') : 'none';
             if (match) visibleCount++;
         });
+    });
+
+    // Sur mobile : la barre de recherche est un simple bouton rond qui s'élargit au clic
+    const searchBar = document.getElementById('search-bar');
+    const searchInputEl = document.getElementById('search-input');
+
+    searchBar.addEventListener('click', () => {
+        if (window.innerWidth <= 640 && !searchBar.classList.contains('expanded')) {
+            searchBar.classList.add('expanded');
+            searchInputEl.focus();
+        }
+    });
+
+    searchInputEl.addEventListener('blur', () => {
+        if (window.innerWidth <= 640 && searchInputEl.value.trim() === '') {
+            searchBar.classList.remove('expanded');
+        }
     });
 
     // Vide le champ de recherche à chaque changement de vue
