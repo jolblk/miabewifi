@@ -56,6 +56,20 @@ body {
     box-shadow: 0 6px 16px var(--violet-glow);
 }
 
+.icon svg,
+button svg,
+.topbar-icon-btn svg,
+.empty-hint svg {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+}
+
+.logo-badge .icon svg {
+    width: 20px;
+    height: 20px;
+}
+
 .logo-badge span {
     font-weight: 700;
     font-size: 18px;
@@ -690,7 +704,7 @@ body.dashboard-body {
 .new-router-btn {
     width: auto;
     padding: 10px 18px;
-    margin: 0;
+    margin: 1;
 }
 
 .view {

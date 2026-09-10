@@ -20,43 +20,47 @@
                 </div>
             </div>
 
-            <div class="nav-section-title">Pilotage</div>
             <a class="nav-link" data-target="dashboard" onclick="allerA('dashboard')"><span class="icon">▦</span>
                 Tableau de
                 bord</a>
-            <a class="nav-link" data-target="routers" onclick="allerA('routers')"><span class="icon">📡</span>
+            <a class="nav-link" data-target="routers" onclick="allerA('routers')"><span class="icon"><i
+                        data-feather="radio"></i></span>
                 Routeurs</a>
-            <a class="nav-link" data-target="wallet" onclick="allerA('wallet')"><span class="icon">💳</span> Mon
+            <a class="nav-link" data-target="wallet" onclick="allerA('wallet')"><span class="icon"><i
+                        data-feather="credit-card"></i></span> Mon
                 portefeuille</a>
 
             <div class="nav-section-title">Mon compte</div>
-            <a class="nav-link" data-target="profile" onclick="allerA('profile')"><span class="icon">🔒</span> Mon
+            <a class="nav-link" data-target="profile" onclick="allerA('profile')"><span class="icon"><i
+                        data-feather="lock"></i></span> Mon
                 profil</a>
-            <a class="nav-link" data-target="support" onclick="allerA('support')"><span class="icon">❔</span>
+            <a class="nav-link" data-target="support" onclick="allerA('support')"><span class="icon"><i
+                        data-feather="help-circle"></i></span>
                 Support</a>
 
             <div class="nav-section-title" id="admin-section" style="display:none;">Administration</div>
             <a class="nav-link" data-target="admin-overview" onclick="allerA('admin-overview')" id="admin-link-1"
                 style="display:none;"><span class="icon">▦</span> Vue d'ensemble</a>
             <a class="nav-link" data-target="admin-users" onclick="allerA('admin-users')" id="admin-link-2"
-                style="display:none;"><span class="icon">👥</span> Utilisateurs</a>
+                style="display:none;"><span class="icon"><i data-feather="users"></i></span> Utilisateurs</a>
             <a class="nav-link" data-target="admin-routers" onclick="allerA('admin-routers')" id="admin-link-3"
-                style="display:none;"><span class="icon">📡</span> Tous les routeurs</a>
+                style="display:none;"><span class="icon"><i data-feather="radio"></i></span> Tous les routeurs</a>
             <a class="nav-link" data-target="admin-tx" onclick="allerA('admin-tx')" id="admin-link-4"
-                style="display:none;"><span class="icon">💳</span> Transactions (admin)</a>
+                style="display:none;"><span class="icon"><i data-feather="credit-card"></i></span> Transactions
+                (admin)</a>
             <div class="sidebar-footer">
                 <div class="avatar" id="user-avatar">?</div>
                 <div class="info">
                     <div class="name" id="user-name">Chargement...</div>
                     <div class="role">Opérateur</div>
                 </div>
-                <button id="logout-btn" title="Déconnexion">⏻</button>
+                <button id="logout-btn" title="Déconnexion"><i data-feather="log-out"></i></button>
             </div>
         </aside>
 
         <div class="main-area">
             <div class="topbar">
-                <button class="menu-toggle-btn" id="menu-toggle" aria-label="Menu">☰</button>
+                <button class="menu-toggle-btn" id="menu-toggle" aria-label="Menu"><i data-feather="menu"></i></button>
                 <span class="mobile-brand">MIABEWIFI</span>
                 <span class="breadcrumb"><strong>MIABEWIFI</strong> · Tableau de bord</span>
                 <div class="search-bar" id="search-bar">
@@ -68,7 +72,7 @@
                     <input type="text" id="search-input" placeholder="Rechercher un routeur, utilisateur, log...">
                 </div>
                 <div class="topbar-icon-btn" id="notif-bell" style="position:relative;">
-                    🔔
+                    <i data-feather="bell" aria-hidden="true"></i>
                     <span id="notif-badge"
                         style="display:none; position:absolute; top:-4px; right:-4px; background:#dc2626; color:white; font-size:10px; font-weight:700; border-radius:20px; padding:1px 5px; min-width:16px; text-align:center;">0</span>
                 </div>
@@ -90,7 +94,7 @@
                     <p class="greeting">Bonjour <strong id="greeting-name">...</strong>, voici l'état de vos routeurs.
                     </p>
 
-                    <button class="new-router-btn" style="margin-bottom:20px;" onclick="ouvrirModalPacks()">📦 Voir les
+                    <button class="new-router-btn" style="margin-bottom:20px; margin-top:0px;" onclick="ouvrirModalPacks()">Voir les
                         abonnements</button>
 
                     <div class="stats-row">
@@ -98,7 +102,8 @@
                             <div class="label">Solde portefeuille</div>
                             <div class="big-number" id="solde-affiche">-- <small>FCFA</small></div>
                             <div class="sub-text">Rechargez pour activer des packs</div>
-                            <button class="secondary" onclick="allerA('wallet')">💳 Recharger</button>
+                            <button class="new-router-btn" onclick="allerA('wallet')">Recharger</button>
+                            <button class="secondary" onclick="allerA('wallet')">Retirer</button>
                         </div>
 
                         <div class="stat-card">
@@ -131,7 +136,8 @@
                                 <h3>Échéances à venir <span class="count-pill" id="deadlines-count">0</span></h3>
                             </div>
                             <div id="deadlines-list">
-                                <p class="empty-hint">✓ Aucune licence n'expire dans les 7 prochains jours.</p>
+                                <p class="empty-hint"><i data-feather="check-circle" aria-hidden="true"></i> Aucune
+                                    licence n'expire dans les 7 prochains jours.</p>
                             </div>
                         </div>
 
@@ -140,7 +146,8 @@
                                 <h3>À activer / à surveiller <span class="count-pill" id="watch-count">0</span></h3>
                             </div>
                             <div id="watch-list">
-                                <p class="empty-hint">✓ Tous vos routeurs sont opérationnels.</p>
+                                <p class="empty-hint"><i data-feather="check-circle" aria-hidden="true"></i> Tous vos
+                                    routeurs sont opérationnels.</p>
                             </div>
                         </div>
                     </div>
@@ -180,9 +187,48 @@
                             <p class="greeting" style="margin:0;">Solde et historique. Débité à chaque activation ou
                                 renouvellement.</p>
                         </div>
-                        <button class="new-router-btn"
-                            onclick="document.getElementById('recharge-panel').style.display='block'">+
-                            Recharger via PayGate</button>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <button class="new-router-btn"
+                                onclick="document.getElementById('recharge-panel').style.display='block'; document.getElementById('retrait-panel').style.display='none';">Recharger via PayGate</button>
+                            <button class="secondary" style="width:auto; padding:10px 18px;"
+                                onclick="document.getElementById('retrait-panel').style.display='block'; document.getElementById('recharge-panel').style.display='none';">Retirer</button>
+                        </div>
+                    </div>
+
+                    <div id="recharge-panel" style="display:none;" class="section-card">
+                        <div class="section-header">
+                            <h3>Recharger le portefeuille</h3>
+                        </div>
+                        <label>Numéro de téléphone</label>
+                        <div class="input-wrapper"><input type="tel" id="recharge-phone" placeholder="90000000"></div>
+                        <label>Réseau</label>
+                        <select id="recharge-network">
+                            <option value="FLOOZ">Flooz</option>
+                            <option value="TMONEY">T-Money</option>
+                        </select>
+                        <label>Montant (FCFA)</label>
+                        <div class="input-wrapper"><input type="number" id="recharge-montant" placeholder="1000"></div>
+                        <button id="recharge-btn">Envoyer la demande</button>
+                        <p id="recharge-message"></p>
+                    </div>
+
+                    <div id="retrait-panel" style="display:none;" class="section-card">
+                        <div class="section-header">
+                            <h3>Retirer des fonds</h3>
+                        </div>
+                        <p class="sub-text" style="margin:-8px 0 16px;">Les fonds seront envoyés directement sur le
+                            numéro mobile money indiqué.</p>
+                        <label>Numéro de téléphone</label>
+                        <div class="input-wrapper"><input type="tel" id="retrait-phone" placeholder="90000000"></div>
+                        <label>Réseau</label>
+                        <select id="retrait-network">
+                            <option value="FLOOZ">Flooz</option>
+                            <option value="TMONEY">T-Money</option>
+                        </select>
+                        <label>Montant (FCFA)</label>
+                        <div class="input-wrapper"><input type="number" id="retrait-montant" placeholder="1000"></div>
+                        <button id="retrait-btn">Retirer</button>
+                        <p id="retrait-message"></p>
                     </div>
 
                     <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
@@ -218,30 +264,14 @@
                         <span class="count-pill">STANDARD</span>
                     </div>
 
-                    <div id="recharge-panel" style="display:none;" class="section-card">
-                        <div class="section-header">
-                            <h3>Recharger le portefeuille</h3>
-                        </div>
-                        <label>Numéro de téléphone</label>
-                        <div class="input-wrapper"><input type="tel" id="recharge-phone" placeholder="90000000"></div>
-                        <label>Réseau</label>
-                        <select id="recharge-network">
-                            <option value="FLOOZ">Flooz</option>
-                            <option value="TMONEY">T-Money</option>
-                        </select>
-                        <label>Montant (FCFA)</label>
-                        <div class="input-wrapper"><input type="number" id="recharge-montant" placeholder="1000"></div>
-                        <button id="recharge-btn">Envoyer la demande</button>
-                        <p id="recharge-message"></p>
-                    </div>
-
                     <div class="section-card">
                         <div class="section-header">
                             <h3>Historique des transactions <span id="tx-count-label"
                                     style="font-weight:400; color:var(--text-muted); font-size:13px;">0 sur 0
                                     récentes</span></h3>
                             <button class="secondary" id="export-csv-btn"
-                                style="width:auto; padding:9px 16px; font-size:13px;">⬇
+                                style="width:auto; padding:9px 16px; font-size:13px;"><i data-feather="download"
+                                    aria-hidden="true"></i>
                                 Exporter CSV</button>
                         </div>
 
@@ -249,7 +279,8 @@
                             <div style="text-align:center; padding:50px 0;">
                                 <div
                                     style="width:56px;height:56px;background:#fce7f3;border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:22px;">
-                                    💳</div>
+                                    <i data-feather="credit-card" aria-hidden="true"></i>
+                                </div>
                                 <p style="font-weight:700; margin:0 0 4px;">Aucune transaction pour l'instant</p>
                                 <p class="sub-text">Rechargez votre portefeuille pour démarrer.</p>
                             </div>
@@ -272,11 +303,12 @@
 
                 <!-- VUE : Support -->
                 <div class="view" data-view="support">
-                    <h1>Support</h1>
+                    <h1>Nous contacter</h1>
                     <div class="section-card">
                         <p>Besoin d'aide ? Contacte-nous à <strong>support@miabewifi.com</strong></p>
                     </div>
                 </div>
+
                 <!-- VUE ADMIN : Vue d'ensemble -->
                 <div class="view" data-view="admin-overview">
                     <h1>Vue d'ensemble (Admin)</h1>
@@ -340,7 +372,8 @@
         <div class="modal-box">
             <div class="modal-header">
                 <h2>Abonnements disponibles</h2>
-                <button class="modal-close" onclick="fermerModalPacks()">✕</button>
+                <button class="modal-close" onclick="fermerModalPacks()" aria-label="Fermer"><i
+                        data-feather="x"></i></button>
             </div>
 
             <div class="modal-body">
@@ -361,7 +394,7 @@
 
                 <div id="packs-step-recharge" style="display:none;">
                     <div class="warning-banner">
-                        <span class="icon">⚠️</span>
+                        <span class="icon"><i data-feather="alert-triangle"></i></span>
                         <div class="text">
                             <strong>Solde insuffisant</strong>
                             <span>Rechargez votre portefeuille pour activer ce pack.</span>
@@ -385,6 +418,7 @@
             </div>
         </div>
     </div>
+    <script src="https://unpkg.com/feather-icons"></script>
     <script src="app.js"></script>
 </body>
 

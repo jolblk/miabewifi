@@ -20,17 +20,21 @@ if (isLoginPage) {
 
     if (typeof feather !== 'undefined') feather.replace();
 
-    const passwordToggle = document.getElementById('toggle-password-visibility');
-    const eyeIcon = passwordToggle.querySelector('.feather-eye');
-    const eyeOffIcon = passwordToggle.querySelector('.feather-eye-off');
-    const passwordInput = document.getElementById('login-password');
+    function wirePasswordToggle(toggleId, inputEl) {
+        const toggle = document.getElementById(toggleId);
+        const eyeIcon = toggle.querySelector('.feather-eye');
+        const eyeOffIcon = toggle.querySelector('.feather-eye-off');
 
-    passwordToggle.addEventListener('click', () => {
-        const isHidden = passwordInput.type === 'password';
-        passwordInput.type = isHidden ? 'text' : 'password';
-        eyeIcon.style.display = isHidden ? 'none' : 'block';
-        eyeOffIcon.style.display = isHidden ? 'block' : 'none';
-    });
+        toggle.addEventListener('click', () => {
+            const isHidden = inputEl.type === 'password';
+            inputEl.type = isHidden ? 'text' : 'password';
+            eyeIcon.style.display = isHidden ? 'none' : 'block';
+            eyeOffIcon.style.display = isHidden ? 'block' : 'none';
+        });
+    }
+
+    wirePasswordToggle('toggle-password-visibility', document.getElementById('login-password'));
+    wirePasswordToggle('toggle-register-password-visibility', document.getElementById('register-password'));
 
     // --- Mot de passe oublié ---
     const forgotLink = document.getElementById('forgot-password-link');
@@ -179,6 +183,8 @@ if (!isLoginPage && document.getElementById('routers-list')) {
     if (!token()) {
         window.location.href = 'login.html';
     }
+
+    if (typeof feather !== 'undefined') feather.replace();
 
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('miabewifi_token');
@@ -415,6 +421,55 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         }
     });
 
+    document.getElementById('retrait-btn').addEventListener('click', async () => {
+        const messageEl = document.getElementById('retrait-message');
+        const montant = parseFloat(document.getElementById('retrait-montant').value);
+        const phone = document.getElementById('retrait-phone').value;
+
+        if (!phone || !montant || montant <= 0) {
+            messageEl.className = 'erreur';
+            messageEl.textContent = 'Renseigne un numéro et un montant valides.';
+            return;
+        }
+
+        if (!confirm(`Confirmer le retrait de ${montant} FCFA vers le ${phone} ?`)) return;
+
+        const btn = document.getElementById('retrait-btn');
+        btn.disabled = true;
+        messageEl.textContent = '';
+
+        const res = await apiFetch('/wallet/retirer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone_number: phone,
+                network: document.getElementById('retrait-network').value,
+                montant,
+            }),
+        });
+        btn.disabled = false;
+        if (!res) return;
+        const data = await res.json();
+
+        if (res.ok) {
+            messageEl.className = 'succes';
+            messageEl.textContent = data.message;
+            document.getElementById('retrait-montant').value = '';
+            document.getElementById('retrait-phone').value = '';
+            chargerSolde();
+            chargerTransactions();
+        } else {
+            messageEl.className = 'erreur';
+            messageEl.textContent = data.detail || 'Erreur.';
+        }
+    });
+
+    function libelleTransaction(t) {
+        if (t.type === 'recharge') return { label: '↓ Recharge', sign: '+', color: '#16a34a' };
+        if (t.type === 'retrait') return { label: '↑ Retrait', sign: '-', color: '#dc2626' };
+        return { label: '↑ Activation pack', sign: '-', color: '#dc2626' };
+    }
+
     async function chargerTransactions() {
         const res = await apiFetch('/wallet/transactions');
         if (!res) return;
@@ -450,18 +505,21 @@ if (!isLoginPage && document.getElementById('routers-list')) {
             return;
         }
 
-        listEl.innerHTML = transactions.map(t => `
+        listEl.innerHTML = transactions.map(t => {
+            const info = libelleTransaction(t);
+            return `
       <div class="router-item" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <strong>${t.type === 'recharge' ? '↓ Recharge' : '↑ Activation pack'}</strong>
+          <strong>${info.label}</strong>
           <span class="badge ${t.statut === 'confirme' ? 'actif' : 'inactif'}">${t.statut}</span>
           <p class="sub-text">${t.methode} · ${new Date(t.created_at).toLocaleString()}</p>
         </div>
-        <strong style="color:${t.type === 'recharge' ? '#16a34a' : '#dc2626'};">
-          ${t.type === 'recharge' ? '+' : '-'}${t.montant} FCFA
+        <strong style="color:${info.color};">
+          ${info.sign}${t.montant} FCFA
         </strong>
       </div>
-    `).join('');
+    `;
+        }).join('');
 
         window._transactionsCache = transactions;
     }
@@ -660,20 +718,24 @@ if (!isLoginPage && document.getElementById('routers-list')) {
       <table class="admin-table">
         <thead><tr><th>Utilisateur</th><th>Type</th><th>Montant</th><th>Méthode</th><th>Statut</th><th>Date</th></tr></thead>
         <tbody>
-          ${txs.map(t => `
+          ${txs.map(t => {
+            const info = libelleTransaction(t);
+            return `
             <tr data-search="${t.user_nom.toLowerCase()} ${t.methode.toLowerCase()} ${t.type.toLowerCase()}">
               <td>${t.user_nom}</td>
-              <td>${t.type === 'recharge' ? '↓ Recharge' : '↑ Débit'}</td>
-              <td style="color:${t.type === 'recharge' ? '#16a34a' : '#dc2626'};">
-                ${t.type === 'recharge' ? '+' : '-'}${t.montant} FCFA
+              <td>${info.label}</td>
+              <td style="color:${info.color};">
+                ${info.sign}${t.montant} FCFA
               </td>
               <td>${t.methode}</td>
               <td><span class="badge ${t.statut === 'confirme' ? 'actif' : 'inactif'}">${t.statut}</span></td>
               <td>${new Date(t.created_at).toLocaleString()}</td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
     }
 
     // --- Recherche globale (filtre la vue active) ---

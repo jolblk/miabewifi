@@ -70,5 +70,11 @@ class RechargeRequest(BaseModel):
     montant: float
 
 
+class WithdrawRequest(BaseModel):
+    phone_number: str
+    network: str  # FLOOZ ou TMONEY
+    montant: float
+
+
 class ActivatePackRequest(BaseModel):
     pack_id: str  # "7j", "30j", "90j"

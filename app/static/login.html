@@ -55,6 +55,10 @@
                 <label>Mot de passe</label>
                 <div class="input-wrapper">
                     <input type="password" id="register-password" placeholder="Choisissez un mot de passe" required>
+                    <div class="icon-right password-toggle" id="toggle-register-password-visibility">
+                        <i data-feather="eye"></i>
+                        <i data-feather="eye-off"></i>
+                    </div>
                 </div>
                 <button type="submit">Créer un compte</button>
             </form>
@@ -72,11 +76,13 @@
         <div class="modal-box">
             <div class="modal-header">
                 <h2>Mot de passe oublié</h2>
-                <button class="modal-close" id="forgot-modal-close">✕</button>
+                <button class="modal-close" id="forgot-modal-close" aria-label="Fermer"><i
+                        data-feather="x"></i></button>
             </div>
             <div class="modal-body">
                 <p style="font-size:13px; color:var(--text-muted); margin:0 0 16px;">
-                    Entrez l'adresse email de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de passe.
+                    Entrez l'adresse email de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de
+                    passe.
                 </p>
                 <label>Email</label>
                 <div class="input-wrapper">

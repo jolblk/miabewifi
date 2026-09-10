@@ -51,6 +51,56 @@ async def recharger(
     return {"message": "Demande de paiement envoyée. Valide sur ton téléphone.", "identifier": identifier}
 
 
+@router.post("/retirer")
+async def retirer(
+    data: schemas.WithdrawRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if data.montant <= 0:
+        raise HTTPException(status_code=400, detail="Montant invalide.")
+
+    if current_user.solde < data.montant:
+        raise HTTPException(status_code=400, detail="Solde insuffisant pour ce retrait.")
+
+    reference = f"miabewifi-retrait-{current_user.id}-{int(time.time() * 1000)}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://paygateglobal.com/api/v1/disburse",
+            json={
+                "auth_token": PAYGATE_AUTH_TOKEN,
+                "phone_number": data.phone_number,
+                "amount": data.montant,
+                "reason": f"Retrait MIABEWIFI - {current_user.email}",
+                "reference": reference,
+                "network": data.network,
+            },
+        )
+        result = response.json()
+
+    if result.get("status") != 200:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Le retrait a échoué auprès de l'opérateur (code {result.get('status')}).",
+        )
+
+    # Le transfert PayGate a réussi : on débite le solde et on trace la transaction
+    current_user.solde -= data.montant
+    transaction = models.Transaction(
+        user_id=current_user.id,
+        montant=data.montant,
+        methode=data.network,
+        statut="confirme",
+        identifier=reference,
+        type="retrait",
+    )
+    db.add(transaction)
+    db.commit()
+
+    return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}
+
+
 @router.post("/webhook/paygate")
 async def paygate_webhook(payload: dict, db: Session = Depends(get_db)):
     identifier = payload.get("identifier")

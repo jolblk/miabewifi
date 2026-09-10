@@ -12,16 +12,21 @@ const messageEl = document.getElementById('reset-message');
 const newPasswordInput = document.getElementById('new-password');
 const confirmPasswordInput = document.getElementById('confirm-password');
 
-const toggle = document.getElementById('toggle-new-password-visibility');
-const eyeIcon = toggle.querySelector('.feather-eye');
-const eyeOffIcon = toggle.querySelector('.feather-eye-off');
+function wirePasswordToggle(toggleId, inputEl) {
+    const toggle = document.getElementById(toggleId);
+    const eyeIcon = toggle.querySelector('.feather-eye');
+    const eyeOffIcon = toggle.querySelector('.feather-eye-off');
 
-toggle.addEventListener('click', () => {
-    const isHidden = newPasswordInput.type === 'password';
-    newPasswordInput.type = isHidden ? 'text' : 'password';
-    eyeIcon.style.display = isHidden ? 'none' : 'block';
-    eyeOffIcon.style.display = isHidden ? 'block' : 'none';
-});
+    toggle.addEventListener('click', () => {
+        const isHidden = inputEl.type === 'password';
+        inputEl.type = isHidden ? 'text' : 'password';
+        eyeIcon.style.display = isHidden ? 'none' : 'block';
+        eyeOffIcon.style.display = isHidden ? 'block' : 'none';
+    });
+}
+
+wirePasswordToggle('toggle-new-password-visibility', newPasswordInput);
+wirePasswordToggle('toggle-confirm-password-visibility', confirmPasswordInput);
 
 if (!token) {
     messageEl.className = 'erreur';
