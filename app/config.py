@@ -14,5 +14,8 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000/static")
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL manquant dans le fichier .env")

@@ -304,8 +304,18 @@
                 <!-- VUE : Support -->
                 <div class="view" data-view="support">
                     <h1>Nous contacter</h1>
-                    <div class="section-card">
-                        <p>Besoin d'aide ? Contacte-nous à <strong>support@miabewifi.com</strong></p>
+                    <p class="greeting">Une question, un problème ? Écris-nous, on te répond au plus vite.</p>
+                    <div class="section-card" style="max-width:500px;">
+                        <label for="support-telephone">Numéro de téléphone</label>
+                        <div class="input-wrapper">
+                            <input type="tel" id="support-telephone" placeholder="90000000" inputmode="numeric"
+                                pattern="[0-9]{8}" maxlength="8" required>
+                        </div>
+                        <label>Message</label>
+                        <textarea id="support-message" rows="6"
+                            placeholder="Décris ton problème ou ta question..."></textarea>
+                        <button id="support-submit-btn" style="margin-top:16px;">Envoyer</button>
+                        <p id="support-status"></p>
                     </div>
                 </div>
 

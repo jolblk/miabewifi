@@ -56,20 +56,6 @@ body {
     box-shadow: 0 6px 16px var(--violet-glow);
 }
 
-.icon svg,
-button svg,
-.topbar-icon-btn svg,
-.empty-hint svg {
-    width: 18px;
-    height: 18px;
-    vertical-align: middle;
-}
-
-.logo-badge .icon svg {
-    width: 20px;
-    height: 20px;
-}
-
 .logo-badge span {
     font-weight: 700;
     font-size: 18px;
@@ -210,6 +196,27 @@ select {
 
 input:focus,
 select:focus {
+    outline: none;
+    border-color: var(--violet);
+    box-shadow: 0 0 0 4px var(--violet-glow);
+    background: white;
+}
+
+textarea {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dark);
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 100px;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+textarea:focus {
     outline: none;
     border-color: var(--violet);
     box-shadow: 0 0 0 4px var(--violet-glow);
@@ -530,7 +537,7 @@ body.dashboard-body {
 .search-bar {
     flex: 1;
     background: var(--bg-input);
-    border: 1px solid var(--border);
+    border: 1.5px solid var(--border);
     border-radius: 10px;
     padding: 9px 14px;
     font-size: 13px;
@@ -538,13 +545,13 @@ body.dashboard-body {
     display: flex;
     align-items: center;
     gap: 10px;
-    transition: border-color 0.2s, background 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .search-bar:focus-within {
     border-color: var(--violet);
+    box-shadow: 0 0 0 4px var(--violet-glow);
     background: white;
-    box-shadow: none;
 }
 
 .search-bar .search-icon {

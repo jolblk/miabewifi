@@ -331,7 +331,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
               <button class="secondary" onclick="voirConfig(${r.id})">Voir script de config</button>
               <button class="secondary" onclick="activerPack(${r.id})">Activer un pack</button>
               <button class="danger" onclick="supprimerRouteur(${r.id})">Supprimer</button>
-              <div id="config-${r.id}"></div>
+              <div class="config-output" data-config-id="${r.id}"></div>
             </div>
           `;
             }).join('');
@@ -345,7 +345,9 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         const res = await apiFetch(`/routers/${id}/regenerate`, { method: 'POST' });
         if (!res) return;
         const data = await res.json();
-        document.getElementById(`config-${id}`).innerHTML = `<pre>${data.config_script}</pre>`;
+        document.querySelectorAll(`[data-config-id="${id}"]`).forEach(el => {
+            el.innerHTML = `<pre>${data.config_script}</pre>`;
+        });
     };
 
     window.activerPack = async (id) => {
@@ -461,6 +463,47 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         } else {
             messageEl.className = 'erreur';
             messageEl.textContent = data.detail || 'Erreur.';
+        }
+    });
+
+    // --- Formulaire de support (envoyé vers Telegram) ---
+    document.getElementById('support-submit-btn').addEventListener('click', async () => {
+        const statusEl = document.getElementById('support-status');
+        const telephone = document.getElementById('support-telephone').value.trim();
+        const messageText = document.getElementById('support-message').value.trim();
+
+        if (!/^[0-9]{8}$/.test(telephone)) {
+            statusEl.className = 'erreur';
+            statusEl.textContent = 'Saisis un numéro de téléphone à 8 chiffres (ex : 90000000).';
+            return;
+        }
+        if (!messageText) {
+            statusEl.className = 'erreur';
+            statusEl.textContent = "Merci de décrire votre demande avant d'envoyer.";
+            return;
+        }
+
+        const btn = document.getElementById('support-submit-btn');
+        btn.disabled = true;
+        statusEl.textContent = '';
+
+        const res = await apiFetch('/support/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telephone, message: messageText }),
+        });
+        btn.disabled = false;
+        if (!res) return;
+        const data = await res.json();
+
+        if (res.ok) {
+            statusEl.className = 'succes';
+            statusEl.textContent = data.message;
+            document.getElementById('support-telephone').value = '';
+            document.getElementById('support-message').value = '';
+        } else {
+            statusEl.className = 'erreur';
+            statusEl.textContent = data.detail || "Erreur lors de l'envoi.";
         }
     });
 

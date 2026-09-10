@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.database import engine, Base
 from app import models
-from app.routers import auth, routers_management, wallet, admin, notifications, packs_info
+from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -34,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(routers_management.router)
 app.include_router(wallet.router)
 app.include_router(admin.router)
+app.include_router(support.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")

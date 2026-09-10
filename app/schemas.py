@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Optional
 
 
 class UserCreate(BaseModel):
@@ -74,6 +75,12 @@ class WithdrawRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
     montant: float
+
+
+class SupportMessage(BaseModel):
+    telephone: Optional[str] = None
+    sujet: Optional[str] = None
+    message: str
 
 
 class ActivatePackRequest(BaseModel):
