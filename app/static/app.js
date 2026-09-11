@@ -2,6 +2,39 @@ const API = '';
 const token = () => localStorage.getItem('miabewifi_token') || sessionStorage.getItem('miabewifi_token');
 const isLoginPage = document.getElementById('login-form') !== null;
 
+// --- Animation générique de déroulement/rétractation ---
+function toggleSlide(el, show) {
+    if (show) {
+        el.style.display = 'block';
+        el.style.overflow = 'hidden';
+        el.style.maxHeight = '0px';
+        el.style.opacity = '0';
+        el.style.transition = 'max-height 0.3s ease, opacity 0.25s ease';
+        const targetHeight = el.scrollHeight;
+        requestAnimationFrame(() => {
+            el.style.maxHeight = targetHeight + 'px';
+            el.style.opacity = '1';
+        });
+        el.addEventListener('transitionend', function onEnd() {
+            el.style.maxHeight = 'none';
+            el.removeEventListener('transitionend', onEnd);
+        }, { once: true });
+    } else {
+        el.style.overflow = 'hidden';
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.transition = 'max-height 0.3s ease, opacity 0.25s ease';
+        requestAnimationFrame(() => {
+            el.style.maxHeight = '0px';
+            el.style.opacity = '0';
+        });
+        setTimeout(() => { el.style.display = 'none'; }, 300);
+    }
+}
+
+function isSlideOpen(el) {
+    return el.style.display === 'block';
+}
+
 // --- Page de connexion / inscription ---
 if (isLoginPage) {
     // Si une session existe déjà (token en localStorage via "Rester connecté",
@@ -178,6 +211,19 @@ window.allerA = function (viewName) {
     if (viewName === 'wallet') chargerTransactions();
 };
 
+// Affiche un panneau avec animation et referme l'autre (ex : Recharger / Retirer)
+window.togglePanel = function (showId, hideId) {
+    const showEl = document.getElementById(showId);
+    const hideEl = document.getElementById(hideId);
+
+    if (hideEl && isSlideOpen(hideEl)) {
+        toggleSlide(hideEl, false);
+    }
+    if (showEl && !isSlideOpen(showEl)) {
+        toggleSlide(showEl, true);
+    }
+};
+
 // --- Tableau de bord (client + admin) ---
 if (!isLoginPage && document.getElementById('routers-list')) {
     if (!token()) {
@@ -263,7 +309,6 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         const data = await res.json();
         document.getElementById('solde-affiche').innerHTML = `${data.solde} <small>FCFA</small>`;
         document.getElementById('w-solde').innerHTML = `${data.solde} <small>FCFA</small>`;
-        document.getElementById('solde-affiche-2').innerHTML = `${data.solde} <small>FCFA</small>`;
     }
 
     async function chargerRouteurs() {
@@ -328,7 +373,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
                  SSH: ${r.ports.find(p => p.service_type === 'ssh')?.public_port || '-'}</p>
               ${trialActif ? `<p>Essai jusqu'au: ${new Date(r.trial_expires_at).toLocaleString()}</p>` : ''}
               ${abonnementActif ? `<p>Abonnement jusqu'au: ${new Date(r.subscription_expires_at).toLocaleString()}</p>` : ''}
-              <button class="secondary" onclick="voirConfig(${r.id})">Voir script de config</button>
+              <button class="secondary" onclick="voirConfig(${r.id})">Voir / masquer le script de config</button>
               <button class="secondary" onclick="activerPack(${r.id})">Activer un pack</button>
               <button class="danger" onclick="supprimerRouteur(${r.id})">Supprimer</button>
               <div class="config-output" data-config-id="${r.id}"></div>
@@ -342,11 +387,29 @@ if (!isLoginPage && document.getElementById('routers-list')) {
     }
 
     window.voirConfig = async (id) => {
+        const elements = document.querySelectorAll(`[data-config-id="${id}"]`);
+        if (elements.length === 0) return;
+
+        // Contenu déjà généré cette session : on se contente d'ouvrir/fermer, sans jamais retoucher aux clés
+        if (elements[0].dataset.loaded === 'true') {
+            elements.forEach(el => toggleSlide(el, !isSlideOpen(el)));
+            return;
+        }
+
+        const confirme = confirm(
+            "Générer ce script crée de nouvelles clés de sécurité pour ce routeur.\n\n" +
+            "Si ce routeur est déjà configuré et connecté avec un script précédent, il cessera de fonctionner tant que tu n'auras pas recollé ce nouveau script dans MikroTik.\n\n" +
+            "Continuer ?"
+        );
+        if (!confirme) return;
+
         const res = await apiFetch(`/routers/${id}/regenerate`, { method: 'POST' });
         if (!res) return;
         const data = await res.json();
-        document.querySelectorAll(`[data-config-id="${id}"]`).forEach(el => {
+        elements.forEach(el => {
             el.innerHTML = `<pre>${data.config_script}</pre>`;
+            el.dataset.loaded = 'true';
+            toggleSlide(el, true);
         });
     };
 
@@ -775,7 +838,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
               <td>${new Date(t.created_at).toLocaleString()}</td>
             </tr>
           `;
-          }).join('')}
+        }).join('')}
         </tbody>
       </table>
       </div>`;

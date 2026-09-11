@@ -189,9 +189,9 @@
                         </div>
                         <div style="display:flex; gap:10px; flex-wrap:wrap;">
                             <button class="new-router-btn"
-                                onclick="document.getElementById('recharge-panel').style.display='block'; document.getElementById('retrait-panel').style.display='none';">Recharger via PayGate</button>
+                                onclick="togglePanel('recharge-panel', 'retrait-panel')"</button>
                             <button class="secondary" style="width:auto; padding:10px 18px;"
-                                onclick="document.getElementById('retrait-panel').style.display='block'; document.getElementById('recharge-panel').style.display='none';">Retirer</button>
+                                onclick="togglePanel('retrait-panel', 'recharge-panel')">Retirer</button>
                         </div>
                     </div>
 
