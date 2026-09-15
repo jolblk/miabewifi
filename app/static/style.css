@@ -535,7 +535,7 @@ body.dashboard-body {
 }
 
 .search-bar {
-    flex: 1;
+    flex: 2;
     background: var(--bg-input);
     border: 1.5px solid var(--border);
     border-radius: 10px;
@@ -568,14 +568,29 @@ body.dashboard-body {
     border: none;
     background: none;
     outline: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
     width: 100%;
     font-size: 13px;
     color: var(--text-dark);
     min-width: 0;
 }
 
+.search-bar input:focus {
+    box-shadow: none;
+    background: none;
+}
+
 .search-bar input::placeholder {
     color: var(--text-muted);
+}
+
+.search-empty-msg {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
 }
 
 .topbar-icon-btn {

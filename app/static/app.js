@@ -216,10 +216,17 @@ window.togglePanel = function (showId, hideId) {
     const showEl = document.getElementById(showId);
     const hideEl = document.getElementById(hideId);
 
+    // Second clic sur le même bouton : on rétracte son panneau
+    if (showEl && isSlideOpen(showEl)) {
+        toggleSlide(showEl, false);
+        return;
+    }
+
+    // Premier clic : on ferme l'autre panneau s'il était ouvert, puis on déroule celui-ci
     if (hideEl && isSlideOpen(hideEl)) {
         toggleSlide(hideEl, false);
     }
-    if (showEl && !isSlideOpen(showEl)) {
+    if (showEl) {
         toggleSlide(showEl, true);
     }
 };
@@ -845,20 +852,60 @@ if (!isLoginPage && document.getElementById('routers-list')) {
     }
 
     // --- Recherche globale (filtre la vue active) ---
-    document.getElementById('search-input').addEventListener('input', (e) => {
-        const query = e.target.value.trim().toLowerCase();
+    // --- Recherche globale (filtre la vue active) ---
+    function stripAccents(str) {
+        return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function getEmptyMsgEl(vueActive) {
+        let msg = vueActive.querySelector('.search-empty-msg');
+        if (!msg) {
+            msg = document.createElement('p');
+            msg.className = 'search-empty-msg';
+            msg.style.display = 'none';
+            vueActive.appendChild(msg);
+        }
+        return msg;
+    }
+
+    function filtrerVue(query) {
         const vueActive = document.querySelector('.view.active');
         if (!vueActive) return;
 
+        const normalizedQuery = stripAccents(query.trim().toLowerCase());
         const items = vueActive.querySelectorAll('[data-search]');
         let visibleCount = 0;
 
         items.forEach(item => {
-            const match = item.getAttribute('data-search').includes(query);
+            const match = stripAccents(item.getAttribute('data-search')).includes(normalizedQuery);
             const isRow = item.tagName === 'TR';
             item.style.display = match ? (isRow ? 'table-row' : 'block') : 'none';
             if (match) visibleCount++;
         });
+
+        const emptyMsg = getEmptyMsgEl(vueActive);
+        if (normalizedQuery && visibleCount === 0 && items.length > 0) {
+            emptyMsg.textContent = `Aucun résultat pour "${query.trim()}".`;
+            emptyMsg.style.display = 'block';
+        } else {
+            emptyMsg.style.display = 'none';
+        }
+    }
+
+    let searchDebounceTimer = null;
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchDebounceTimer);
+        const query = e.target.value;
+        searchDebounceTimer = setTimeout(() => filtrerVue(query), 200);
+    });
+
+    document.getElementById('search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.target.value = '';
+            clearTimeout(searchDebounceTimer);
+            filtrerVue('');
+            e.target.blur();
+        }
     });
 
     // Sur mobile : la barre de recherche est un simple bouton rond qui s'élargit au clic
@@ -887,6 +934,8 @@ if (!isLoginPage && document.getElementById('routers-list')) {
         document.querySelectorAll('.view.active [data-search]').forEach(item => {
             item.style.display = item.tagName === 'TR' ? 'table-row' : 'block';
         });
+        const activeMsg = document.querySelector('.view.active .search-empty-msg');
+        if (activeMsg) activeMsg.style.display = 'none';
     };
 
     async function chargerNotifications() {

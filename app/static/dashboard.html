@@ -63,13 +63,14 @@
                 <button class="menu-toggle-btn" id="menu-toggle" aria-label="Menu"><i data-feather="menu"></i></button>
                 <span class="mobile-brand">MIABEWIFI</span>
                 <span class="breadcrumb"><strong>MIABEWIFI</strong> · Tableau de bord</span>
-                <div class="search-bar" id="search-bar">
-                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="search-bar" id="search-bar" role="search">
+                    <input type="text" id="search-input" aria-label="Rechercher" placeholder="Rechercher un routeur, utilisateur...">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <input type="text" id="search-input" placeholder="Rechercher un routeur, utilisateur, log...">
+                    
                 </div>
                 <div class="topbar-icon-btn" id="notif-bell" style="position:relative;">
                     <i data-feather="bell" aria-hidden="true"></i>
@@ -125,9 +126,9 @@
                             <h3>Statut de mes routeurs <span class="count-pill" id="routers-status-count">0</span></h3>
                             <button class="new-router-btn" onclick="allerA('routers')">Gérer →</button>
                         </div>
-                        <div id="routers-list-preview">
+                        <!-- <div id="routers-list-preview">
                             <p class="empty-hint">Chargement...</p>
-                        </div>
+                        </div> -->
                     </div>
 
                     <div class="two-col">
@@ -321,7 +322,7 @@
 
                 <!-- VUE ADMIN : Vue d'ensemble -->
                 <div class="view" data-view="admin-overview">
-                    <h1>Vue d'ensemble (Admin)</h1>
+                    <h1>Vue d'ensemble</h1>
                     <p class="greeting">Supervision globale de la plateforme.</p>
                     <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
                         <div class="stat-card">
