@@ -122,8 +122,21 @@ async def paygate_webhook(payload: dict, db: Session = Depends(get_db)):
         data = verification.json()
 
     if data.get("status") == 0:
-        transaction.statut = "confirme"
+        # Mise à jour atomique : ne réussit que si le statut est encore "en_attente".
+        # Empêche un double crédit si deux appels webhook arrivent en même temps.
+        rows_updated = (
+            db.query(models.Transaction)
+            .filter(
+                models.Transaction.identifier == identifier,
+                models.Transaction.statut != "confirme",
+            )
+            .update({"statut": "confirme"}, synchronize_session=False)
+        )
         db.commit()
+
+        if rows_updated == 0:
+            # Une autre requête a déjà traité cette transaction entre-temps.
+            return {"status": "already_processed"}
 
         user = db.query(models.User).filter(models.User.id == transaction.user_id).first()
         user.solde += transaction.montant

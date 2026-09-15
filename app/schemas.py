@@ -1,11 +1,12 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote_plus
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     nom: str
 
 
@@ -38,6 +39,12 @@ class ResetPasswordRequest(BaseModel):
 class RouterCreate(BaseModel):
     nom: str
 
+class PortMappingOut(BaseModel):
+    service_type: str
+    public_port: int
+
+    class Config:
+        from_attributes = True
 
 class RouterOut(BaseModel):
     id: int
@@ -58,23 +65,17 @@ class RouterConfigOut(BaseModel):
     router: RouterOut
     config_script: str
 
-class PortMappingOut(BaseModel):
-    service_type: str
-    public_port: int
-
-    class Config:
-        from_attributes = True
 
 class RechargeRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
-    montant: float
+    montant: float = Field(gt=0)
 
 
 class WithdrawRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
-    montant: float
+    montant: float = Field(gt=0)
 
 
 class SupportMessage(BaseModel):

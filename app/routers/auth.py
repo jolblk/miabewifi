@@ -7,13 +7,16 @@ from app.database import get_db
 from app import models, schemas, security
 from app.config import FRONTEND_URL
 from app.email_utils import send_reset_email
+from app.limiter import limiter
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentification"])
 
 
 @router.post("/register", response_model=schemas.UserOut)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+
+def register(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Cet email est déjà utilisé.")
@@ -30,7 +33,8 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
 
     if not user or not security.verify_password(form_data.password, user.hashed_password):
@@ -50,7 +54,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
 
     if user:
@@ -66,7 +70,7 @@ def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depend
 
 
 @router.post("/reset-password")
-def reset_password(payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(request: Request, payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
     data = security.decode_reset_token(payload.token)
     if not data:
         raise HTTPException(status_code=400, detail="Lien invalide ou expiré.")
