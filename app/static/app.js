@@ -380,8 +380,8 @@ if (!isLoginPage && document.getElementById('routers-list')) {
                  SSH: ${r.ports.find(p => p.service_type === 'ssh')?.public_port || '-'}</p>
               ${trialActif ? `<p>Essai jusqu'au: ${new Date(r.trial_expires_at).toLocaleString()}</p>` : ''}
               ${abonnementActif ? `<p>Abonnement jusqu'au: ${new Date(r.subscription_expires_at).toLocaleString()}</p>` : ''}
+              <button class="secondary" onclick="ouvrirModalPacks(${r.id})">Activer un pack</button>
               <button class="secondary" onclick="voirConfig(${r.id})">Voir / masquer le script de config</button>
-              <button class="secondary" onclick="activerPack(${r.id})">Activer un pack</button>
               <button class="danger" onclick="supprimerRouteur(${r.id})">Supprimer</button>
               <div class="config-output" data-config-id="${r.id}"></div>
             </div>
@@ -418,25 +418,6 @@ if (!isLoginPage && document.getElementById('routers-list')) {
             el.dataset.loaded = 'true';
             toggleSlide(el, true);
         });
-    };
-
-    window.activerPack = async (id) => {
-        const packId = prompt('Quel pack ? (7j, 30j, 90j)');
-        if (!packId) return;
-        const res = await apiFetch(`/routers/${id}/activer-pack`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pack_id: packId }),
-        });
-        if (!res) return;
-        const data = await res.json();
-        if (res.ok) {
-            alert(data.message);
-            chargerSolde();
-            chargerRouteurs();
-        } else {
-            alert(data.detail);
-        }
     };
 
     window.supprimerRouteur = async (id) => {
@@ -652,8 +633,10 @@ if (!isLoginPage && document.getElementById('routers-list')) {
 
     let packSelectionne = null;
     let soldeActuel = 0;
+    let routeurPreselectionneId = null;
 
-    window.ouvrirModalPacks = async () => {
+    window.ouvrirModalPacks = async (routerId = null) => {
+        routeurPreselectionneId = routerId;
         document.getElementById('packs-modal').style.display = 'flex';
         retourListePacks();
 
@@ -678,6 +661,7 @@ if (!isLoginPage && document.getElementById('routers-list')) {
 
     window.fermerModalPacks = () => {
         document.getElementById('packs-modal').style.display = 'none';
+        routeurPreselectionneId = null;
     };
 
     window.retourListePacks = () => {
@@ -700,6 +684,10 @@ if (!isLoginPage && document.getElementById('routers-list')) {
 
         document.getElementById('pack-selectionne-label').textContent = `${pack.label} — ${pack.montant} FCFA`;
         document.getElementById('pack-router-select').innerHTML = routeurs.map(r => `<option value="${r.id}">${r.nom}</option>`).join('');
+
+        if (routeurPreselectionneId) {
+            document.getElementById('pack-router-select').value = routeurPreselectionneId;
+        }
 
         document.getElementById('packs-step-list').style.display = 'none';
         document.getElementById('packs-step-router').style.display = 'block';
