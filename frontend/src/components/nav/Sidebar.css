@@ -1,0 +1,36 @@
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    min-height: 100vh;
+    padding: 20px 12px;
+}
+
+.sidebar-logo {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 17px;
+    padding: 0 12px 20px;
+}
+
+.sidebar-section-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 18px 12px 6px;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.sidebar-link.active {
+    color: var(--violet);
+    background: var(--violet-glow);
+    font-weight: 500;
+}
