@@ -95,3 +95,11 @@ input {
     transition-duration: 0.01ms !important;
   }
 }
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}

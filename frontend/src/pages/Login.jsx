@@ -83,6 +83,10 @@ export default function Login() {
                 <button type="submit" className="login-submit" disabled={loading}>
                     {loading ? 'Connexion...' : 'Se connecter'}
                 </button>
+
+                <p className="forgot-link" style={{ textAlign: 'center', marginTop: 16 }}>
+                    Pas encore de compte ? <a href="/register">Créer un compte</a>
+                </p>
             </form>
         </div>
     );

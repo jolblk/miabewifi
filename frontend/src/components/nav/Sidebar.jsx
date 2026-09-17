@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { mainNavItems, adminNavItems } from './navItems';
 import './Sidebar.css';
 
@@ -11,7 +12,7 @@ function NavGroup({ items }) {
     ));
 }
 
-export default function Sidebar({ isAdmin }) {
+export default function Sidebar({ isAdmin, onLogout }) {
     return (
         <aside className="sidebar">
             <div className="sidebar-logo">MIABEWIFI</div>
@@ -22,6 +23,10 @@ export default function Sidebar({ isAdmin }) {
                     <NavGroup items={adminNavItems} />
                 </>
             )}
+            <button className="sidebar-logout" onClick={onLogout}>
+                <LogOut size={18} strokeWidth={2} />
+                Déconnexion
+            </button>
         </aside>
     );
 }

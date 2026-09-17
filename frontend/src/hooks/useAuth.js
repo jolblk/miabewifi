@@ -16,6 +16,11 @@ export function useAuth() {
             .catch(() => setUser(null))
             .finally(() => setLoading(false));
     }, []);
+    function logout() {
+        localStorage.removeItem('miabewifi_token');
+        sessionStorage.removeItem('miabewifi_token');
+        window.location.href = '/login';
+    }
 
-    return { user, loading, isAdmin: user?.role === 'admin' };
+    return { user, loading, isAdmin: user?.role === 'admin', logout };
 }

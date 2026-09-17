@@ -59,7 +59,7 @@ def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db
 
     if user:
         token = security.create_reset_token(user.id)
-        reset_link = f"{FRONTEND_URL}/reset-password.html?token={token}"
+        reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
         try:
             send_reset_email(user.email, reset_link)
         except Exception:
