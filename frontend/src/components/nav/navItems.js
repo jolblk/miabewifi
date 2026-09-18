@@ -1,4 +1,4 @@
-import { LayoutDashboard, Radio, Wallet, Lock, HelpCircle, Users, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Radio, Wallet, Lock, HelpCircle, Users, CreditCard, Ticket, Activity } from 'lucide-react';
 
 export const mainNavItems = [
     { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -6,6 +6,8 @@ export const mainNavItems = [
     { to: '/wallet', label: 'Portefeuille', icon: Wallet },
     { to: '/profile', label: 'Profil', icon: Lock },
     { to: '/support', label: 'Support', icon: HelpCircle },
+    { to: '/hotspot', label: 'Tickets HotSpot', icon: Ticket },
+    { to: '/hotspot/suivi', label: 'Suivi HotSpot', icon: Activity },
 ];
 
 export const adminNavItems = [

@@ -29,6 +29,8 @@ class Router(Base):
     is_connected = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     trial_expires_at = Column(DateTime, nullable=True)
+    mikrotik_api_username = Column(String, nullable=True)
+    mikrotik_api_password = Column(String, nullable=True)
     subscription_expires_at = Column(DateTime, nullable=True)  # nouveau champ
 
     owner = relationship("User", back_populates="routers")
@@ -57,3 +59,42 @@ class Transaction(Base):
     identifier = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     type = Column(String, default="recharge")  # "recharge", "debit" ou "retrait"
+
+class VoucherBatch(Base):
+    __tablename__ = "voucher_batches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    profile_name = Column(String, nullable=False)  # nom du profil HotSpot sur le MikroTik
+    prix_unitaire = Column(Float, nullable=False)
+    quantite = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    vouchers = relationship("Voucher", back_populates="batch")
+
+
+class Voucher(Base):
+    __tablename__ = "vouchers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("voucher_batches.id"), nullable=False)
+    code = Column(String, unique=True, index=True, nullable=False)
+    statut = Column(String, default="AVAILABLE")  # AVAILABLE, USED, EXPIRED
+    created_at = Column(DateTime, default=datetime.utcnow)
+    used_at = Column(DateTime, nullable=True)
+
+    batch = relationship("VoucherBatch", back_populates="vouchers")
+    sale = relationship("Sale", back_populates="voucher", uselist=False)
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id = Column(Integer, primary_key=True, index=True)
+    voucher_id = Column(Integer, ForeignKey("vouchers.id"), unique=True, nullable=False)
+    montant = Column(Float, nullable=False)
+    vendu_par = Column(Integer, ForeignKey("users.id"), nullable=False)
+    vendu_le = Column(DateTime, default=datetime.utcnow)
+
+    voucher = relationship("Voucher", back_populates="sale")

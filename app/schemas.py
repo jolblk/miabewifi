@@ -65,6 +65,9 @@ class RouterConfigOut(BaseModel):
     router: RouterOut
     config_script: str
 
+class MikrotikCredentialsUpdate(BaseModel):
+    api_username: str
+    api_password: str
 
 class RechargeRequest(BaseModel):
     phone_number: str
@@ -86,3 +89,45 @@ class SupportMessage(BaseModel):
 
 class ActivatePackRequest(BaseModel):
     pack_id: str  # "7j", "30j", "90j"
+
+class VoucherBatchCreate(BaseModel):
+    profile_name: str
+    prix_unitaire: float = Field(gt=0)
+    quantite: int = Field(gt=0, le=500)
+
+
+class SaleCreate(BaseModel):
+    montant: Optional[float] = None
+
+
+class SaleOut(BaseModel):
+    id: int
+    montant: float
+    vendu_par: int
+    vendu_le: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class VoucherOut(BaseModel):
+    id: int
+    code: str
+    statut: str
+    created_at: datetime
+    sale: Optional[SaleOut] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VoucherBatchOut(BaseModel):
+    id: int
+    profile_name: str
+    prix_unitaire: float
+    quantite: int
+    created_at: datetime
+    vouchers: list[VoucherOut] = []
+
+    class Config:
+        from_attributes = True

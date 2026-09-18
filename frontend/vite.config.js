@@ -13,6 +13,7 @@ export default defineConfig({
       '/admin': 'http://localhost:8001',
       '/support': 'http://localhost:8001',
       '/notifications': 'http://localhost:8001',
+      '/hotspot': 'http://localhost:8001',
     }
   },
   build: {

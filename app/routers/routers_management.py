@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas, wireguard
 from app.dependencies import get_current_user
+from app.routeros_client import RouterOSClient
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
 
@@ -104,6 +105,59 @@ def get_router_status(
         "trial_expires_at": db_router.trial_expires_at,
         "subscription_expires_at": db_router.subscription_expires_at,
     }
+
+
+@router.patch("/{router_id}/mikrotik-credentials")
+def set_mikrotik_credentials(
+    router_id: int,
+    data: schemas.MikrotikCredentialsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+
+    db_router.mikrotik_api_username = data.api_username
+    db_router.mikrotik_api_password = data.api_password
+    db.commit()
+
+    return {"message": "Identifiants API MikroTik enregistrés."}
+
+
+@router.get("/{router_id}/mikrotik-status")
+async def get_mikrotik_status(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+
+    if not db_router.mikrotik_api_username or not db_router.mikrotik_api_password:
+        raise HTTPException(status_code=400, detail="Identifiants API MikroTik non configurés pour ce routeur.")
+
+    client = RouterOSClient(
+        router_ip=db_router.wireguard_ip,
+        username=db_router.mikrotik_api_username,
+        password=db_router.mikrotik_api_password,
+    )
+
+    try:
+        data = await client.system_resource()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+    return data
 
 
 @router.delete("/{router_id}")

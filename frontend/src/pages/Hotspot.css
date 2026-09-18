@@ -1,0 +1,28 @@
+.hotspot-router-picker {
+    margin-bottom: 1rem;
+    max-width: 300px;
+}
+
+.hotspot-batches {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.voucher-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.voucher-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border-color, #e5e5e5);
+    border-radius: 8px;
+    font-size: 0.85rem;
+}

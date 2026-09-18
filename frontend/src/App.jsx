@@ -10,6 +10,8 @@ import Routers from './pages/Routers';
 import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import Support from './pages/Support';
+import Hotspot from './pages/Hotspot';
+import HotspotMonitor from './pages/HotspotMonitor';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminRouters from './pages/admin/AdminRouters';
@@ -32,6 +34,8 @@ function App() {
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/hotspot" element={<Hotspot />} />
+            <Route path="/hotspot/suivi" element={<HotspotMonitor />} />
             <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminOverview />} />
