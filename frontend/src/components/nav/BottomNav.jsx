@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
-import { mainNavItems } from './navItems';
+import { mobileNavItems } from './navItems';
 import './BottomNav.css';
 
 export default function BottomNav({ isAdmin }) {
     const items = isAdmin
-        ? [...mainNavItems, { to: '/admin', label: 'Admin', icon: ShieldCheck }]
-        : mainNavItems;
+        ? [...mobileNavItems, { to: '/admin', label: 'Admin', icon: ShieldCheck }]
+        : mobileNavItems;
 
     return (
         <nav className="bottom-nav">
