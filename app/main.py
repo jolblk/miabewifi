@@ -1,9 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
 from app.database import engine, Base
 from app import models
@@ -14,8 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 Base.metadata.create_all(bind=engine)
-
-limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(title="MIABEWIFI")
 app.state.limiter = limiter

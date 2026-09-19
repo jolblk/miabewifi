@@ -6,12 +6,9 @@ from app.database import get_db
 from app import models, schemas, wireguard
 from app.dependencies import get_current_user
 from app.routeros_client import RouterOSClient
+from app.config import SERVER_PUBLIC_KEY, SERVER_ENDPOINT
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
-
-# Clé publique du SERVEUR (VPS) — à générer une fois et mettre dans .env plus tard
-SERVER_PUBLIC_KEY = "CLE_PUBLIQUE_SERVEUR_A_DEFINIR"
-SERVER_ENDPOINT = "195.35.48.80:51820"  # IP du VPS + port WireGuard standard
 
 
 @router.post("/", response_model=schemas.RouterConfigOut)
@@ -264,3 +261,30 @@ def activer_pack(
         "nouveau_solde": current_user.solde,
         "subscription_expires_at": db_router.subscription_expires_at,
     }
+
+@router.post("/{router_id}/credentials", response_model=dict)
+def save_router_credentials(
+    router_id: int,
+    data: schemas.MikrotikCredentialsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Enregistre (chiffres) les identifiants API RouterOS du routeur."""
+
+    from app.crypto import encrypt
+
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+
+    db_router.mikrotik_api_username = encrypt(data.api_username)
+    db_router.mikrotik_api_password = encrypt(data.api_password)
+    db.commit()
+    db.refresh(db_router)
+
+    return {"message": "Identifiants MikroTik enregistres (chiffres)."}
+

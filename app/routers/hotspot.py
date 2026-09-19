@@ -31,10 +31,12 @@ def _get_authorized_router(router_id: int, db: Session, current_user: models.Use
 
 
 def _client_for(db_router: models.Router) -> RouterOSClient:
+    from app.crypto import decrypt
+
     return RouterOSClient(
         router_ip=db_router.wireguard_ip,
-        username=db_router.mikrotik_api_username,
-        password=db_router.mikrotik_api_password,
+        username=decrypt(db_router.mikrotik_api_username),
+        password=decrypt(db_router.mikrotik_api_password),
     )
 
 

@@ -8,8 +8,6 @@ from app import models, schemas, security
 from app.config import FRONTEND_URL
 from app.email_utils import send_reset_email
 from app.limiter import limiter
-
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentification"])
 
 
