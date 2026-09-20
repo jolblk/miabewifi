@@ -1,3 +1,4 @@
+from app.crypto import decrypt, encrypt
 from app.packs import PACKS
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
@@ -123,7 +124,7 @@ def set_mikrotik_credentials(
         raise HTTPException(status_code=404, detail="Routeur introuvable.")
 
     db_router.mikrotik_api_username = data.api_username
-    db_router.mikrotik_api_password = data.api_password
+    db_router.mikrotik_api_password = encrypt(data.api_password)
     db.commit()
 
     return {"message": "Identifiants API MikroTik enregistrés."}
@@ -149,7 +150,7 @@ async def get_mikrotik_status(
     client = RouterOSClient(
         router_ip=db_router.wireguard_ip,
         username=db_router.mikrotik_api_username,
-        password=db_router.mikrotik_api_password,
+        password=decrypt(db_router.mikrotik_api_password),
     )
 
     try:

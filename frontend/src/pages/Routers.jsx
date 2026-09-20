@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Trash2, Zap, X, Copy } from 'lucide-react';
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
@@ -15,6 +16,7 @@ function statutRouteur(r) {
 }
 
 export default function Routers() {
+    const navigate = useNavigate();
     const { routers, packs, loading, error, createRouter, deleteRouter, regenerateRouter, activerPack } = useRoutersData();
     const { query } = useSearch();
     const normalizedQuery = stripAccents(query.trim());
@@ -89,7 +91,7 @@ export default function Routers() {
         <div>
             <div className="section-header">
                 <h1 className="page-title">Mes routeurs</h1>
-                <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
+                <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
                     <Plus size={16} /> Ajouter un routeur
                 </button>
             </div>
@@ -117,7 +119,10 @@ export default function Routers() {
 
             {!loading && routers.length === 0 && (
                 <div className="section-card">
-                    <p className="empty-hint">Vous n'avez encore aucun routeur. Ajoutez-en un pour démarrer.</p>
+                    <p className="empty-hint">Vous n'avez encore aucun routeur.</p>
+                    <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
+                        <Plus size={16} /> Commencer la configuration guidée
+                    </button>
                 </div>
             )}
 
