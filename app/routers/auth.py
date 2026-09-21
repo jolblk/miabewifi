@@ -53,6 +53,17 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/logout")
+def logout(
+    token: str = Depends(oauth2_scheme_for_logout),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db.add(models.RevokedToken(token_hash=security.hash_token(token)))
+    db.commit()
+    return {"message": "Déconnecté."}
+
+
 @router.post("/forgot-password")
 def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
