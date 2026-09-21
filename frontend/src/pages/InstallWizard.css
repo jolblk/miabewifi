@@ -1,0 +1,149 @@
+.wizard {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+}
+
+.wizard-progress {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.wizard-dot {
+    width: 32px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.wizard-dot.is-done {
+    background: var(--violet);
+}
+
+.wizard-step-label {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 24px;
+}
+
+.wizard-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 24px;
+    text-align: center;
+}
+
+.wizard-card-centered {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+}
+
+.wizard-hint {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 8px 0 20px;
+}
+
+.wizard-hint-small {
+    font-size: 12px;
+    margin-top: 12px;
+}
+
+.wizard-input {
+    width: 100%;
+    margin-bottom: 16px;
+    text-align: center;
+    font-size: 16px;
+}
+
+.wizard-btn-main {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+}
+
+.wizard-script {
+    text-align: left;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.wizard-copy-btn {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.wizard-spinner {
+    color: var(--violet);
+    animation: wizard-spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+.wizard-success-icon {
+    color: var(--success);
+    margin-bottom: 16px;
+}
+
+@keyframes wizard-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.wizard-packs {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.wizard-pack-card {
+    position: relative;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.wizard-pack-card.is-recommended {
+    border-color: var(--violet);
+    background: var(--violet-glow);
+}
+
+.wizard-pack-badge {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--violet);
+    color: white;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.wizard-pack-label {
+    font-weight: 600;
+}
+
+.wizard-pack-price {
+    color: var(--text-muted);
+}

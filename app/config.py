@@ -19,3 +19,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL manquant dans le fichier .env")
+
+CRYPT_KEY = os.getenv("CRYPT_KEY")
+if not CRYPT_KEY:
+    raise ValueError("CRYPT_KEY manquant dans le fichier .env")
