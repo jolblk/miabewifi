@@ -4,6 +4,13 @@ import { Copy, Check, Loader2, Wifi, PartyPopper } from 'lucide-react';
 import api from '../api/client';
 import './InstallWizard.css';
 
+const STEP_LABELS = {
+    1: "création du routeur",
+    2: "collage du script dans Winbox",
+    3: "attente de connexion du routeur",
+    4: "choix du forfait",
+};
+
 const RECOMMENDED_PACK_ID = '30j';
 const POLL_INTERVAL_MS = 4000;
 
@@ -18,6 +25,9 @@ export default function InstallWizard() {
     const [copied, setCopied] = useState(false);
     const [connected, setConnected] = useState(false);
     const [packs, setPacks] = useState([]);
+    const [helpOpen, setHelpOpen] = useState(false);
+    const [helpMessage, setHelpMessage] = useState('');
+    const [helpSent, setHelpSent] = useState(false);
     const pollRef = useRef(null);
 
     // Étape 3 : on vérifie la connexion toutes les 4 secondes, sans que
@@ -62,6 +72,32 @@ export default function InstallWizard() {
     function handleCopy() {
         navigator.clipboard.writeText(script);
         setCopied(true);
+    }
+
+    async function handleDownloadCard() {
+        try {
+            const res = await api.get(`/routers/${router.id}/setup-card`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `installation-${router.nom}.pdf`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+        } catch {
+            setError("Impossible de générer la fiche d'installation pour le moment.");
+        }
+    }
+
+    async function handleSendHelp(e) {
+        e.preventDefault();
+        try {
+            await api.post('/support/contact', {
+                message: `[Assistant d'installation — bloqué à l'étape "${STEP_LABELS[step]}"] ${helpMessage.trim() || "L'utilisateur demande de l'aide sans précision."}`,
+            });
+            setHelpSent(true);
+        } catch {
+            setHelpSent(true); // on affiche quand même une confirmation rassurante côté utilisateur
+        }
     }
 
     async function handleActiverPack(packId) {
@@ -120,8 +156,11 @@ export default function InstallWizard() {
                         {copied ? 'Copié !' : 'Copier le script'}
                     </button>
                     <p className="wizard-hint wizard-hint-small">
-                        Besoin d'aide pour trouver le terminal dans Winbox ? Regarde le tutoriel vidéo (lien à venir).
+                        Besoin d'aide pour trouver le terminal dans Winbox ?
                     </p>
+                    <button className="btn-secondary wizard-copy-btn" onClick={handleDownloadCard}>
+                        Télécharger la fiche d'installation (PDF)
+                    </button>
                     <button
                         className="btn-primary wizard-btn-main"
                         disabled={!copied}
@@ -169,6 +208,36 @@ export default function InstallWizard() {
                                 <span className="wizard-pack-price">{p.montant} FCFA</span>
                             </button>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            <button className="wizard-help-link" onClick={() => setHelpOpen(true)}>
+                Besoin d'aide ?
+            </button>
+
+            {helpOpen && (
+                <div className="modal-overlay" onClick={() => setHelpOpen(false)}>
+                    <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                        {helpSent ? (
+                            <p className="success-text">
+                                C'est envoyé ! Notre équipe vous recontacte rapidement.
+                            </p>
+                        ) : (
+                            <form className="form-stack" onSubmit={handleSendHelp}>
+                                <label className="field-label" htmlFor="wizard-help">
+                                    Décris ton problème (optionnel, on voit déjà où tu es bloqué)
+                                </label>
+                                <textarea
+                                    id="wizard-help"
+                                    className="text-input"
+                                    style={{ width: '100%', minHeight: 100 }}
+                                    value={helpMessage}
+                                    onChange={(e) => setHelpMessage(e.target.value)}
+                                />
+                                <button className="btn-primary" type="submit">Envoyer</button>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

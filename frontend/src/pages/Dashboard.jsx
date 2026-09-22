@@ -1,89 +1,88 @@
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle, Wallet } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import './Dashboard.css';
+
+function routerStatus(r, now) {
+    const trialActive = r.trial_expires_at && new Date(r.trial_expires_at) > now;
+    const aboActive = r.subscription_expires_at && new Date(r.subscription_expires_at) > now;
+    const expiryDate = r.subscription_expires_at ? new Date(r.subscription_expires_at) : null;
+    const dans7j = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    if (!trialActive && !aboActive) {
+        return { label: 'À activer', tone: 'danger', Icon: XCircle };
+    }
+    if (aboActive && expiryDate <= dans7j) {
+        return { label: `Expire le ${expiryDate.toLocaleDateString()}`, tone: 'warning', Icon: AlertTriangle };
+    }
+    return { label: 'Actif', tone: 'success', Icon: CheckCircle2 };
+}
 
 export default function Dashboard() {
     const { user } = useOutletContext();
     const navigate = useNavigate();
-    const { solde, routers, actifs, prochaineEcheance, echeancesProches, aSurveiller, loading } = useDashboardData();
+    const { solde, routers, aSurveiller, loading } = useDashboardData();
+    const now = new Date();
 
     return (
         <div>
-            <h1 className="page-title">Mon compte</h1>
-            <p className="greeting">Bonjour <strong>{user?.nom}</strong>, voici l'état de vos routeurs.</p>
+            <h1 className="page-title">Bonjour {user?.nom}</h1>
 
-            <button className="btn-secondary" onClick={() => navigate('/routers')}>
-                Voir les abonnements
-            </button>
+            {!loading && aSurveiller.length > 0 && (
+                <button className="alert-banner" onClick={() => navigate('/routers')}>
+                    <XCircle size={20} />
+                    <span>
+                        {aSurveiller.length === 1
+                            ? '1 routeur a besoin d\'un pack pour fonctionner'
+                            : `${aSurveiller.length} routeurs ont besoin d'un pack pour fonctionner`}
+                    </span>
+                </button>
+            )}
 
-            <div className="stats-row">
-                <div className="stat-card">
-                    <div className="stat-label">Solde portefeuille</div>
-                    <div className="stat-number">{loading ? '--' : solde} <small>FCFA</small></div>
-                    <div className="stat-sub">Rechargez pour activer des packs</div>
-                    <div className="stat-actions">
-                        <button className="btn-primary" onClick={() => navigate('/wallet')}>Recharger</button>
-                        <button className="btn-secondary" onClick={() => navigate('/wallet')}>Retirer</button>
+            <div className="wallet-card" onClick={() => navigate('/wallet')}>
+                <div className="wallet-card-left">
+                    <Wallet size={22} />
+                    <div>
+                        <div className="stat-label">Solde disponible</div>
+                        <div className="stat-number">{loading ? '--' : solde} <small>FCFA</small></div>
                     </div>
                 </div>
-
-                <div className="stat-card">
-                    <div className="stat-label">Mes routeurs</div>
-                    <div className="stat-number">{actifs.length}<small>/{routers.length}</small></div>
-                    <div className="stat-sub">
-                        {routers.length === 0 ? 'Aucun routeur pour le moment' : `${actifs.length} routeur(s) actif(s) sur ${routers.length}`}
-                    </div>
-                </div>
-
-                <div className="stat-card">
-                    <div className="stat-label">Prochaine échéance</div>
-                    <div className="stat-number" style={{ fontSize: 18 }}>
-                        {prochaineEcheance ? prochaineEcheance.toLocaleDateString() : 'Aucune licence active'}
-                    </div>
-                    <div className="stat-sub">Activez un pack pour démarrer un routeur</div>
-                </div>
+                <button className="btn-primary" onClick={(e) => { e.stopPropagation(); navigate('/wallet'); }}>
+                    Gérer mon solde
+                </button>
             </div>
 
             <div className="section-card">
                 <div className="section-header">
-                    <h2>Statut de mes routeurs <span className="count-pill">{routers.length}</span></h2>
-                    <button className="btn-secondary" onClick={() => navigate('/routers')}>Gérer</button>
-                </div>
-            </div>
-
-            <div className="two-col">
-                <div className="section-card">
-                    <div className="section-header">
-                        <h2>Échéances à venir <span className="count-pill">{echeancesProches.length}</span></h2>
-                    </div>
-                    {echeancesProches.length === 0 ? (
-                        <p className="empty-hint"><CheckCircle2 size={16} /> Aucune licence n'expire dans les 7 prochains jours.</p>
-                    ) : (
-                        echeancesProches.map((r) => (
-                            <div key={r.id} className="deadline-row">
-                                <AlertTriangle size={16} />
-                                <span><strong>{r.nom}</strong> expire le {new Date(r.subscription_expires_at).toLocaleDateString()}</span>
-                            </div>
-                        ))
+                    <h2>Mes routeurs</h2>
+                    {routers.length > 0 && (
+                        <button className="btn-secondary" onClick={() => navigate('/routers')}>Voir tout</button>
                     )}
                 </div>
 
-                <div className="section-card">
-                    <div className="section-header">
-                        <h2>À activer / à surveiller <span className="count-pill">{aSurveiller.length}</span></h2>
+                {routers.length === 0 ? (
+                    <div className="empty-router-state">
+                        <p className="empty-hint">Vous n'avez pas encore de routeur.</p>
+                        <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
+                            Ajouter mon premier routeur
+                        </button>
                     </div>
-                    {aSurveiller.length === 0 ? (
-                        <p className="empty-hint"><CheckCircle2 size={16} /> Tous vos routeurs sont opérationnels.</p>
-                    ) : (
-                        aSurveiller.map((r) => (
-                            <div key={r.id} className="watch-row">
-                                <XCircle size={16} />
-                                <span><strong>{r.nom}</strong> — accès expiré, pack à activer</span>
-                            </div>
-                        ))
-                    )}
-                </div>
+                ) : (
+                    <div className="router-status-list">
+                        {routers.map((r) => {
+                            const { label, tone, Icon } = routerStatus(r, now);
+                            return (
+                                <button key={r.id} className="router-status-row" onClick={() => navigate('/routers')}>
+                                    <span className={`status-dot status-${tone}`} />
+                                    <span className="router-status-name">{r.nom}</span>
+                                    <span className={`router-status-label tone-${tone}`}>
+                                        <Icon size={14} /> {label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -23,3 +23,11 @@ if not DATABASE_URL:
 CRYPT_KEY = os.getenv("CRYPT_KEY")
 if not CRYPT_KEY:
     raise ValueError("CRYPT_KEY manquant dans le fichier .env")
+
+TUTORIAL_VIDEO_URL = os.getenv("TUTORIAL_VIDEO_URL", "")
+
+FRONTEND_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]

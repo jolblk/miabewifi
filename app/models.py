@@ -98,3 +98,11 @@ class Sale(Base):
     vendu_le = Column(DateTime, default=datetime.utcnow)
 
     voucher = relationship("Voucher", back_populates="sale")
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String, unique=True, index=True, nullable=False)
+    revoked_at = Column(DateTime, default=datetime.utcnow)

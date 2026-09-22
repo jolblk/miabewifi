@@ -161,6 +161,34 @@ async def get_mikrotik_status(
     return data
 
 
+@router.get("/{router_id}/setup-card")
+def download_setup_card(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+
+    from app.pdf_generator import generate_router_setup_card
+    from app.config import TUTORIAL_VIDEO_URL
+    import io
+    from fastapi.responses import StreamingResponse
+
+    pdf_bytes = generate_router_setup_card(db_router, TUTORIAL_VIDEO_URL)
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=installation-{db_router.nom}.pdf"},
+    )
+
+
 @router.delete("/{router_id}")
 def delete_router(
     router_id: int,

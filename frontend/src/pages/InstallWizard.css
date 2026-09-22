@@ -147,3 +147,14 @@
 .wizard-pack-price {
     color: var(--text-muted);
 }
+
+.wizard-help-link {
+    display: block;
+    margin: 24px auto 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
+}

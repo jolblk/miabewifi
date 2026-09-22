@@ -12,6 +12,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalide.")
 
+    if db.query(models.RevokedToken).filter(models.RevokedToken.token_hash == security.hash_token(token)).first():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expirée, reconnectez-vous.")
+
     user_id = payload.get("sub")
     user = db.query(models.User).filter(models.User.id == int(user_id)).first()
     if user is None:

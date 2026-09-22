@@ -53,3 +53,43 @@ def generate_vouchers_pdf(batch, vouchers) -> bytes:
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def generate_router_setup_card(router, video_url: str) -> bytes:
+    buffer = io.BytesIO()
+    page_width, page_height = A4
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(page_width / 2, page_height - 40 * mm, "Fiche d'installation MIABEWIFI")
+
+    c.setFont("Helvetica", 13)
+    c.drawCentredString(page_width / 2, page_height - 55 * mm, f"Routeur : {router.nom}")
+
+    if video_url:
+        qr_size = 60 * mm
+        qr_img = _qr_image(video_url)
+        c.drawImage(
+            qr_img,
+            (page_width - qr_size) / 2,
+            page_height - 130 * mm,
+            width=qr_size,
+            height=qr_size,
+        )
+        c.setFont("Helvetica", 11)
+        c.drawCentredString(
+            page_width / 2,
+            page_height - 140 * mm,
+            "Scannez ce code pour voir le tutoriel vidéo",
+        )
+
+    c.setFont("Helvetica-Oblique", 10)
+    c.drawCentredString(
+        page_width / 2,
+        30 * mm,
+        "Gardez cette fiche près de votre routeur.",
+    )
+
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()

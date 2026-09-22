@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
@@ -46,3 +47,7 @@ def decode_reset_token(token: str) -> dict | None:
         return payload
     except Exception:
         return None
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()

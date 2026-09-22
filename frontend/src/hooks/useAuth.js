@@ -17,6 +17,7 @@ export function useAuth() {
             .finally(() => setLoading(false));
     }, []);
     function logout() {
+        api.post('/auth/logout').catch(() => {}); // on efface le token localement même si l'appel échoue
         localStorage.removeItem('miabewifi_token');
         sessionStorage.removeItem('miabewifi_token');
         window.location.href = '/login';

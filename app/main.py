@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base
 from app import models
 from app.limiter import limiter
+from app.config import FRONTEND_ORIGINS
 from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot
 
 from fastapi.staticfiles import StaticFiles
@@ -23,11 +24,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(notifications.router)
 app.include_router(packs_info.router)
 
-# CORS - à restreindre plus tard une fois le frontend défini
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: remplacer par le vrai domaine du frontend en production
-    allow_credentials=True,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

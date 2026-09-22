@@ -46,11 +46,22 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     token = security.create_access_token(data={"sub": str(user.id)})
     return {"access_token": token, "token_type": "bearer"}
 
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, oauth2_scheme as oauth2_scheme_for_logout
 
 @router.get("/me", response_model=schemas.UserOut)
 def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/logout")
+def logout(
+    token: str = Depends(oauth2_scheme_for_logout),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db.add(models.RevokedToken(token_hash=security.hash_token(token)))
+    db.commit()
+    return {"message": "Déconnecté."}
 
 
 @router.post("/forgot-password")
