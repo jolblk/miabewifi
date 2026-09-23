@@ -12,7 +12,7 @@ from app.config import FRONTEND_ORIGINS
 from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -36,8 +36,8 @@ app.include_router(wallet.router)
 app.include_router(admin.router)
 app.include_router(support.router)
 app.include_router(hotspot.router)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/assets", StaticFiles(directory="app/static/dist/assets"), name="assets")
 
-@app.get("/")
-def read_root():
-    return RedirectResponse(url="/static/login.html")
+@app.get("/{full_path:path}")
+def serve_react(full_path: str):
+    return FileResponse("app/static/dist/index.html")
