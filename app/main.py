@@ -36,6 +36,10 @@ app.include_router(wallet.router)
 app.include_router(admin.router)
 app.include_router(support.router)
 app.include_router(hotspot.router)
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 app.mount("/assets", StaticFiles(directory="app/static/dist/assets"), name="assets")
 
 @app.get("/{full_path:path}")
