@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app import models, schemas
+from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
 
@@ -34,7 +35,7 @@ def _client_for(db_router: models.Router) -> RouterOSClient:
     return RouterOSClient(
         router_ip=db_router.wireguard_ip,
         username=db_router.mikrotik_api_username,
-        password=db_router.mikrotik_api_password,
+        password=decrypt(db_router.mikrotik_api_password),
     )
 
 
