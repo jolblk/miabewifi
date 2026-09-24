@@ -27,8 +27,10 @@ export default function Register() {
         }
 
         setLoading(true);
+        window.umami?.track('signup_started');
         try {
             await api.post('/auth/register', { nom, email, password });
+            window.umami?.track('signup_completed');
             setSuccess(true);
         } catch (err) {
             setError(err.response?.data?.detail || "Impossible de créer le compte.");
