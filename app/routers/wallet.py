@@ -125,7 +125,8 @@ async def retirer(
 
 
 @router.post("/webhook/paygate")
-async def paygate_webhook(payload: dict, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+async def paygate_webhook(request: Request, payload: dict, db: Session = Depends(get_db)):
     identifier = payload.get("identifier")
     tx_reference = payload.get("tx_reference")
 

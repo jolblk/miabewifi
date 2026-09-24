@@ -1,15 +1,20 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app import models, schemas
 from app.dependencies import get_current_user
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/support", tags=["Support"])
 
 
 @router.post("/contact")
+@limiter.limit("5/minute")
 async def contacter_support(
+    request: Request,
     data: schemas.SupportMessage,
     current_user: models.User = Depends(get_current_user),
 ):

@@ -86,10 +86,15 @@ def reset_password(request: Request, payload: schemas.ResetPasswordRequest, db: 
     if not data:
         raise HTTPException(status_code=400, detail="Lien invalide ou expiré.")
 
+    token_hash = security.hash_token(payload.token)
+    if db.query(models.RevokedToken).filter(models.RevokedToken.token_hash == token_hash).first():
+        raise HTTPException(status_code=400, detail="Ce lien a déjà été utilisé.")
+
     user = db.query(models.User).filter(models.User.id == int(data["sub"])).first()
     if not user:
         raise HTTPException(status_code=400, detail="Utilisateur introuvable.")
 
     user.hashed_password = security.hash_password(payload.new_password)
+    db.add(models.RevokedToken(token_hash=token_hash))
     db.commit()
     return {"message": "Mot de passe réinitialisé avec succès."}
