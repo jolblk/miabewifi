@@ -115,6 +115,9 @@ export default function InstallWizard() {
 
     return (
         <div className="wizard">
+            <button className="wizard-quit-btn" onClick={() => navigate('/routers')}>
+                Quitter
+            </button>
             <div className="wizard-progress">
                 {[1, 2, 3, 4].map((n) => (
                     <div key={n} className={`wizard-dot ${n <= step ? 'is-done' : ''}`} />
@@ -194,7 +197,9 @@ export default function InstallWizard() {
                 <div className="wizard-card">
                     <PartyPopper size={40} className="wizard-success-icon" />
                     <h1>Choisis ton forfait</h1>
-                    <p className="wizard-hint">Tu pourras en changer à tout moment depuis "Mes routeurs".</p>
+                    <p className="wizard-hint">
+                        Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.
+                    </p>
                     <div className="wizard-packs">
                         {packs.map((p) => (
                             <button
@@ -209,6 +214,9 @@ export default function InstallWizard() {
                             </button>
                         ))}
                     </div>
+                    <button className="btn-secondary wizard-later-btn" onClick={() => navigate('/routers')}>
+                        Plus tard — profiter de mon essai gratuit
+                    </button>
                 </div>
             )}
 
