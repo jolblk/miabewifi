@@ -1,0 +1,38 @@
+name: Déploiement miabewifi
+
+on:
+  push:
+    branches:
+      - dev-react
+      - main
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/dev-react'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déployer sur staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_PROJECT_PATH }}/staging
+            git pull origin dev-react
+            docker compose up -d --build
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déployer sur prod
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_PROJECT_PATH }}/prod
+            git pull origin main
+            docker compose up -d --build
