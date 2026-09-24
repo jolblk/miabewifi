@@ -60,42 +60,65 @@ async def retirer(
     if data.montant <= 0:
         raise HTTPException(status_code=400, detail="Montant invalide.")
 
+    reference = f"miabewifi-retrait-{current_user.id}-{int(time.time() * 1000)}"
+
+    # Verrouille la ligne utilisateur et débite tout de suite (réservation des fonds).
+    # Empêche deux retraits simultanés de dépasser le solde réellement disponible.
+    current_user = (
+        db.query(models.User)
+        .filter(models.User.id == current_user.id)
+        .with_for_update()
+        .first()
+    )
     if current_user.solde < data.montant:
         raise HTTPException(status_code=400, detail="Solde insuffisant pour ce retrait.")
 
-    reference = f"miabewifi-retrait-{current_user.id}-{int(time.time() * 1000)}"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://paygateglobal.com/api/v1/disburse",
-            json={
-                "auth_token": PAYGATE_AUTH_TOKEN,
-                "phone_number": data.phone_number,
-                "amount": data.montant,
-                "reason": f"Retrait MIABEWIFI - {current_user.email}",
-                "reference": reference,
-                "network": data.network,
-            },
-        )
-        result = response.json()
-
-    if result.get("status") != 200:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Le retrait a échoué auprès de l'opérateur (code {result.get('status')}).",
-        )
-
-    # Le transfert PayGate a réussi : on débite le solde et on trace la transaction
     current_user.solde -= data.montant
     transaction = models.Transaction(
         user_id=current_user.id,
         montant=data.montant,
         methode=data.network,
-        statut="confirme",
+        statut="en_attente",
         identifier=reference,
         type="retrait",
     )
     db.add(transaction)
+    db.commit()
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://paygateglobal.com/api/v1/disburse",
+                json={
+                    "auth_token": PAYGATE_AUTH_TOKEN,
+                    "phone_number": data.phone_number,
+                    "amount": data.montant,
+                    "reason": f"Retrait MIABEWIFI - {current_user.email}",
+                    "reference": reference,
+                    "network": data.network,
+                },
+            )
+            result = response.json()
+    except Exception:
+        result = {"status": None}
+
+    if result.get("status") != 200:
+        # Échec chez PayGate : on rembourse les fonds réservés et on marque l'échec.
+        refund_user = (
+            db.query(models.User)
+            .filter(models.User.id == current_user.id)
+            .with_for_update()
+            .first()
+        )
+        refund_user.solde += data.montant
+        transaction.statut = "echoue"
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Le retrait a échoué auprès de l'opérateur (code {result.get('status')}).",
+        )
+
+    transaction.statut = "confirme"
     db.commit()
 
     return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}

@@ -263,6 +263,14 @@ def activer_pack(
     if not db_router:
         raise HTTPException(status_code=404, detail="Routeur introuvable.")
 
+    # Verrouille la ligne utilisateur pour empêcher deux activations simultanées
+    # de dépasser le solde réellement disponible.
+    current_user = (
+        db.query(models.User)
+        .filter(models.User.id == current_user.id)
+        .with_for_update()
+        .first()
+    )
     if current_user.solde < pack["montant"]:
         raise HTTPException(status_code=400, detail="Solde insuffisant. Recharge ton portefeuille.")
 
