@@ -25,6 +25,9 @@ if not CRYPT_KEY:
     raise ValueError("CRYPT_KEY manquant dans le fichier .env")
 
 
+WG_AGENT_HOST = os.getenv("WG_AGENT_HOST", "host.docker.internal")
+WG_AGENT_KEY_PATH = os.getenv("WG_AGENT_KEY_PATH", "/app/wg_key")
+
 SERVER_PUBLIC_KEY = os.getenv("SERVER_PUBLIC_KEY")
 if not SERVER_PUBLIC_KEY:
     raise ValueError("SERVER_PUBLIC_KEY manquant dans le fichier .env")
