@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app import models, schemas, wireguard
+from app import models, schemas, wireguard, wg_agent
 from app.dependencies import get_current_user
 from app.routeros_client import RouterOSClient
 from app.config import SERVER_PUBLIC_KEY
@@ -48,6 +48,20 @@ def create_router(
 
     db.commit()
     db.refresh(new_router)
+
+    # Déclare ce routeur auprès du serveur WireGuard du VPS : sans ça, le
+    # tunnel ne pourra jamais s'établir même si le script est correctement
+    # collé dans Winbox.
+    try:
+        wg_agent.add_peer(public_key, wireguard_ip)
+    except Exception as e:
+        db.query(models.PortMapping).filter(models.PortMapping.router_id == new_router.id).delete()
+        db.delete(new_router)
+        db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impossible de préparer le serveur pour ce routeur : {e}",
+        )
 
     config_script = f"""/interface/wireguard
 add name=wg-miabewifi listen-port=51820 private-key="{private_key}"
@@ -97,11 +111,27 @@ def get_router_status(
     if not db_router:
         raise HTTPException(status_code=404, detail="Routeur introuvable.")
 
+    # "actif" = l'abonnement/essai est valide. "connecte" = le tunnel
+    # WireGuard est réellement établi avec ce routeur en ce moment.
     active = wireguard.is_router_active(db_router)
+
+    connected = False
+    if db_router.public_key:
+        try:
+            connected = wg_agent.is_peer_connected(db_router.public_key)
+        except Exception:
+            # Le sondage échoue ponctuellement (VPS injoignable, etc.) : on
+            # ne casse pas l'écran, on retente simplement au prochain sondage.
+            connected = db_router.is_connected
+
+    if connected != db_router.is_connected:
+        db_router.is_connected = connected
+        db.commit()
 
     return {
         "router_id": db_router.id,
         "actif": active,
+        "connecte": connected,
         "trial_expires_at": db_router.trial_expires_at,
         "subscription_expires_at": db_router.subscription_expires_at,
     }
@@ -202,6 +232,15 @@ def delete_router(
     if not db_router:
         raise HTTPException(status_code=404, detail="Routeur introuvable.")
 
+    if db_router.public_key:
+        try:
+            wg_agent.remove_peer(db_router.public_key)
+        except Exception:
+            # On ne bloque pas la suppression côté utilisateur pour un souci
+            # réseau ponctuel avec le VPS ; l'entrée orpheline pourra être
+            # nettoyée manuellement côté serveur si besoin.
+            pass
+
     # Supprime d'abord les ports associés (contrainte de clé étrangère)
     db.query(models.PortMapping).filter(models.PortMapping.router_id == router_id).delete()
     db.delete(db_router)
@@ -224,8 +263,21 @@ def regenerate_router_config(
     if not db_router:
         raise HTTPException(status_code=404, detail="Routeur introuvable.")
 
+    old_public_key = db_router.public_key
+
     # Génère une NOUVELLE paire de clés (l'ancienne devient invalide)
     private_key, public_key = wireguard.generate_keypair()
+
+    try:
+        if old_public_key:
+            wg_agent.remove_peer(old_public_key)
+        wg_agent.add_peer(public_key, db_router.wireguard_ip)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impossible de mettre à jour la configuration sur le serveur : {e}",
+        )
+
     db_router.public_key = public_key
     db_router.is_connected = False
     db.commit()

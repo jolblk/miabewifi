@@ -38,7 +38,7 @@ export default function InstallWizard() {
         pollRef.current = setInterval(async () => {
             try {
                 const res = await api.get(`/routers/${router.id}/status`);
-                if (res.data.actif) {
+                if (res.data.connecte) {
                     clearInterval(pollRef.current);
                     setConnected(true);
                     api.get('/packs/').then((r) => setPacks(r.data)).catch(() => setPacks([]));
