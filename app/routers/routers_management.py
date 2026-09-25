@@ -7,11 +7,10 @@ from app.database import get_db
 from app import models, schemas, wireguard
 from app.dependencies import get_current_user
 from app.routeros_client import RouterOSClient
+from app.config import SERVER_PUBLIC_KEY
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
 
-# Clé publique du SERVEUR (VPS) — à générer une fois et mettre dans .env plus tard
-SERVER_PUBLIC_KEY = "CLE_PUBLIQUE_SERVEUR_A_DEFINIR"
 SERVER_ENDPOINT = "195.35.48.80:51820"  # IP du VPS + port WireGuard standard
 
 

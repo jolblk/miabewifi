@@ -24,6 +24,11 @@ CRYPT_KEY = os.getenv("CRYPT_KEY")
 if not CRYPT_KEY:
     raise ValueError("CRYPT_KEY manquant dans le fichier .env")
 
+
+SERVER_PUBLIC_KEY = os.getenv("SERVER_PUBLIC_KEY")
+if not SERVER_PUBLIC_KEY:
+    raise ValueError("SERVER_PUBLIC_KEY manquant dans le fichier .env")
+
 TUTORIAL_VIDEO_URL = os.getenv("TUTORIAL_VIDEO_URL", "")
 
 FRONTEND_ORIGINS = [
