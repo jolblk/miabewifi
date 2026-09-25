@@ -55,6 +55,7 @@ class RouterOut(BaseModel):
     created_at: datetime
     trial_expires_at: datetime | None
     subscription_expires_at: datetime | None
+    mikrotik_api_username: str | None = None
     ports: list[PortMappingOut] = []
 
     class Config:

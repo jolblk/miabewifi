@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound } from 'lucide-react';
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
 import { stripAccents } from '../utils/normalizeText';
@@ -17,7 +17,7 @@ function statutRouteur(r) {
 
 export default function Routers() {
     const navigate = useNavigate();
-    const { routers, packs, loading, error, createRouter, deleteRouter, regenerateRouter, activerPack } = useRoutersData();
+    const { routers, packs, loading, error, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials } = useRoutersData();
     const { query } = useSearch();
     const normalizedQuery = stripAccents(query.trim());
     const filteredRouters = normalizedQuery
@@ -32,6 +32,12 @@ export default function Routers() {
     const [menuOpenId, setMenuOpenId] = useState(null);
     const [detailsOpenId, setDetailsOpenId] = useState(null);
     const [config, setConfig] = useState(null);
+    const [credsRouterId, setCredsRouterId] = useState(null);
+    const [apiUsername, setApiUsername] = useState('');
+    const [apiPassword, setApiPassword] = useState('');
+    const [credsBusy, setCredsBusy] = useState(false);
+    const [credsError, setCredsError] = useState('');
+    const [credsSuccess, setCredsSuccess] = useState(false);
 
     async function handleCreate(e) {
         e.preventDefault();
@@ -75,6 +81,31 @@ export default function Routers() {
             setActionError(err.response?.data?.detail || "Erreur lors de la régénération.");
         } finally {
             setBusy(false);
+        }
+    }
+
+    function openCredsModal(r) {
+        setCredsRouterId(r.id);
+        setApiUsername(r.mikrotik_api_username || '');
+        setApiPassword('');
+        setCredsError('');
+        setCredsSuccess(false);
+        setMenuOpenId(null);
+    }
+
+    async function handleSaveCreds(e) {
+        e.preventDefault();
+        if (!apiUsername.trim() || !apiPassword.trim()) return;
+        setCredsBusy(true);
+        setCredsError('');
+        try {
+            await setMikrotikCredentials(credsRouterId, apiUsername.trim(), apiPassword);
+            setCredsSuccess(true);
+            setApiPassword('');
+        } catch (err) {
+            setCredsError(err.response?.data?.detail || "Erreur lors de l'enregistrement des identifiants.");
+        } finally {
+            setCredsBusy(false);
         }
     }
 
@@ -157,6 +188,9 @@ export default function Routers() {
                                             <button disabled={busy} onClick={() => handleRegenerate(r.id)}>
                                                 <RefreshCw size={14} /> Régénérer la config
                                             </button>
+                                            <button disabled={busy} onClick={() => openCredsModal(r)}>
+                                                <KeyRound size={14} /> Identifiants API MikroTik
+                                            </button>
                                             <button className="router-menu-danger" disabled={busy} onClick={() => handleDelete(r.id)}>
                                                 <Trash2 size={14} /> Supprimer
                                             </button>
@@ -205,6 +239,10 @@ export default function Routers() {
                             {detailsOpenId === r.id && (
                                 <div className="router-meta">
                                     <span>IP WireGuard : <strong>{r.wireguard_ip || '—'}</strong></span>
+                                    <span>
+                                        API MikroTik :{' '}
+                                        <strong>{r.mikrotik_api_username ? `configurée (${r.mikrotik_api_username})` : 'non configurée'}</strong>
+                                    </span>
                                     <span>Créé le {new Date(r.created_at).toLocaleDateString()}</span>
                                     {r.ports?.length > 0 && (
                                         <div className="ports-row">
@@ -234,6 +272,55 @@ export default function Routers() {
                         <button className="btn-primary" onClick={() => navigator.clipboard.writeText(config.script)}>
                             <Copy size={14} /> Copier
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {credsRouterId && (
+                <div className="modal-overlay" onClick={() => setCredsRouterId(null)}>
+                    <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                        <div className="section-header">
+                            <h2>Identifiants API MikroTik</h2>
+                            <button className="btn-secondary" onClick={() => setCredsRouterId(null)}><X size={14} /></button>
+                        </div>
+                        <p className="empty-hint">
+                            Crée un utilisateur API sur ton routeur MikroTik (via Winbox : System → Users), puis renseigne-le ici.
+                            Ces identifiants sont nécessaires pour générer des tickets HotSpot.
+                        </p>
+                        {credsSuccess ? (
+                            <p className="success-text">Identifiants enregistrés avec succès.</p>
+                        ) : (
+                            <form className="form-stack" onSubmit={handleSaveCreds}>
+                                {credsError && <p className="error-text">{credsError}</p>}
+                                <div>
+                                    <label className="field-label" htmlFor="mikrotik-username">Nom d'utilisateur API</label>
+                                    <input
+                                        id="mikrotik-username"
+                                        type="text"
+                                        className="text-input"
+                                        style={{ width: '100%' }}
+                                        value={apiUsername}
+                                        onChange={(e) => setApiUsername(e.target.value)}
+                                        autoComplete="off"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="field-label" htmlFor="mikrotik-password">Mot de passe API</label>
+                                    <input
+                                        id="mikrotik-password"
+                                        type="password"
+                                        className="text-input"
+                                        style={{ width: '100%' }}
+                                        value={apiPassword}
+                                        onChange={(e) => setApiPassword(e.target.value)}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                                <button className="btn-primary" type="submit" disabled={credsBusy || !apiUsername.trim() || !apiPassword.trim()}>
+                                    {credsBusy ? 'Enregistrement...' : 'Enregistrer'}
+                                </button>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

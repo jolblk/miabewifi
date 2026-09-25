@@ -46,5 +46,14 @@ export function useRoutersData() {
         return res.data;
     }
 
-    return { routers, packs, loading, error, fetchAll, createRouter, deleteRouter, regenerateRouter, activerPack };
+    async function setMikrotikCredentials(routerId, apiUsername, apiPassword) {
+        const res = await api.patch(`/routers/${routerId}/mikrotik-credentials`, {
+            api_username: apiUsername,
+            api_password: apiPassword,
+        });
+        await fetchAll();
+        return res.data;
+    }
+
+    return { routers, packs, loading, error, fetchAll, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials };
 }

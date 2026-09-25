@@ -4,6 +4,12 @@
     margin: 0 0 12px;
 }
 
+.success-text {
+    color: var(--success);
+    font-size: 14px;
+    margin: 0 0 12px;
+}
+
 .field-label {
     display: block;
     font-size: 13px;
@@ -14,6 +20,12 @@
 .form-row {
     display: flex;
     gap: 10px;
+}
+
+.form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .text-input {
