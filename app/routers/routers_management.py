@@ -244,7 +244,14 @@ def delete_router(
             # nettoyée manuellement côté serveur si besoin.
             pass
 
-    # Supprime d'abord les ports associés (contrainte de clé étrangère)
+    # Supprime d'abord tout ce qui dépend de ce routeur (contraintes de clé étrangère) :
+    # les ventes, puis les tickets, puis les lots de tickets, puis les ports.
+    batch_ids = db.query(models.VoucherBatch.id).filter(models.VoucherBatch.router_id == router_id).subquery()
+    voucher_ids = db.query(models.Voucher.id).filter(models.Voucher.batch_id.in_(batch_ids)).subquery()
+
+    db.query(models.Sale).filter(models.Sale.voucher_id.in_(voucher_ids)).delete(synchronize_session=False)
+    db.query(models.Voucher).filter(models.Voucher.batch_id.in_(batch_ids)).delete(synchronize_session=False)
+    db.query(models.VoucherBatch).filter(models.VoucherBatch.router_id == router_id).delete(synchronize_session=False)
     db.query(models.PortMapping).filter(models.PortMapping.router_id == router_id).delete()
     db.delete(db_router)
     db.commit()
