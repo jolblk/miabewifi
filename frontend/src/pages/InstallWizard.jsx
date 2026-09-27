@@ -6,7 +6,7 @@ import './InstallWizard.css';
 
 const STEP_LABELS = {
     1: "création du routeur",
-    2: "collage du script dans Winbox",
+    2: "collage du script (navigateur ou Winbox)",
     3: "attente de connexion du routeur",
     4: "choix du forfait",
 };
@@ -151,7 +151,25 @@ export default function InstallWizard() {
                 <div className="wizard-card">
                     <h1>Configure ton routeur</h1>
                     <p className="wizard-hint">
-                        Copie ce script et colle-le dans le terminal Winbox de ton routeur MikroTik.
+                        Connecte-toi d'abord au réseau de ton routeur (câble Ethernet, ou son Wi-Fi
+                        par défaut), puis clique ci-dessous : ça ouvre la page de configuration de
+                        ton routeur directement dans un nouvel onglet — aucun logiciel à installer.
+                    </p>
+                    <a
+                        className="btn-secondary wizard-copy-btn"
+                        href="http://192.168.88.1/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center' }}
+                    >
+                        Ouvrir la configuration de mon routeur
+                    </a>
+                    <p className="wizard-hint wizard-hint-small">
+                        Connecte-toi avec "admin" (sans mot de passe, sauf si tu l'as déjà changé),
+                        puis clique sur "Terminal" dans le menu de gauche.
+                    </p>
+                    <p className="wizard-hint">
+                        Copie ensuite ce script et colle-le dans ce terminal :
                     </p>
                     <pre className="config-script wizard-script">{script}</pre>
                     <button className="btn-secondary wizard-copy-btn" onClick={handleCopy}>
@@ -159,7 +177,7 @@ export default function InstallWizard() {
                         {copied ? 'Copié !' : 'Copier le script'}
                     </button>
                     <p className="wizard-hint wizard-hint-small">
-                        Besoin d'aide pour trouver le terminal dans Winbox ?
+                        L'adresse ne s'ouvre pas, ou tu préfères utiliser Winbox ?
                     </p>
                     <button className="btn-secondary wizard-copy-btn" onClick={handleDownloadCard}>
                         Télécharger la fiche d'installation (PDF)
