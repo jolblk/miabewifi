@@ -24,6 +24,7 @@ export default function InstallWizard() {
     const [script, setScript] = useState('');
     const [copied, setCopied] = useState(false);
     const [connected, setConnected] = useState(false);
+    const [longWait, setLongWait] = useState(false);
     const [packs, setPacks] = useState([]);
     const [helpOpen, setHelpOpen] = useState(false);
     const [helpMessage, setHelpMessage] = useState('');
@@ -51,6 +52,15 @@ export default function InstallWizard() {
 
         return () => clearInterval(pollRef.current);
     }, [step, router]);
+
+    // Après 45 secondes sans connexion, on affiche des pistes concrètes
+    // au lieu de laisser le client face à un simple message qui tourne.
+    useEffect(() => {
+        if (step !== 3) return;
+        setLongWait(false);
+        const timeout = setTimeout(() => setLongWait(true), 45000);
+        return () => clearTimeout(timeout);
+    }, [step]);
 
     async function handleCreate(e) {
         e.preventDefault();
@@ -198,9 +208,23 @@ export default function InstallWizard() {
                         <>
                             <Loader2 className="wizard-spinner" size={48} />
                             <h1>En attente de connexion...</h1>
-                            <p className="wizard-hint">
-                                Vérifie que tu as bien collé tout le script, y compris la dernière ligne.
-                            </p>
+                            {!longWait ? (
+                                <p className="wizard-hint">
+                                    Vérifie que tu as bien collé tout le script, y compris la dernière ligne.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="wizard-hint">Ça prend plus longtemps que prévu. Vérifie que :</p>
+                                    <ul className="wizard-hint" style={{ textAlign: 'left' }}>
+                                        <li>le script a été collé en entier, sans ligne coupée</li>
+                                        <li>le routeur est bien connecté à Internet</li>
+                                        <li>tu n'as pas de pare-feu qui bloque le port 51820</li>
+                                    </ul>
+                                    <p className="wizard-hint wizard-hint-small">
+                                        Toujours bloqué ? Utilise le bouton "Besoin d'aide ?" en bas de l'écran.
+                                    </p>
+                                </>
+                            )}
                         </>
                     ) : (
                         <>

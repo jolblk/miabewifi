@@ -63,7 +63,10 @@ def create_router(
             detail=f"Impossible de préparer le serveur pour ce routeur : {e}",
         )
 
-    config_script = f"""/interface/wireguard
+    config_script = f"""/ip address remove [find interface=wg-miabewifi]
+/interface/wireguard remove [find name=wg-miabewifi]
+
+/interface/wireguard
 add name=wg-miabewifi listen-port=51820 private-key="{private_key}"
 
 /interface/wireguard/peers
@@ -283,7 +286,10 @@ def regenerate_router_config(
     db.commit()
     db.refresh(db_router)
 
-    config_script = f"""/interface/wireguard
+    config_script = f"""/ip address remove [find interface=wg-miabewifi]
+/interface/wireguard remove [find name=wg-miabewifi]
+
+/interface/wireguard
 add name=wg-miabewifi listen-port=51820 private-key="{private_key}"
 
 /interface/wireguard/peers
