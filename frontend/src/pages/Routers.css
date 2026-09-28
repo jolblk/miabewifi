@@ -90,6 +90,11 @@
     color: var(--danger);
 }
 
+.badge-neutral {
+    background: var(--bg-input);
+    color: var(--text-muted);
+}
+
 .router-meta {
     display: flex;
     flex-direction: column;

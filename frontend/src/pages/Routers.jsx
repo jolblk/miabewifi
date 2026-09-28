@@ -15,9 +15,17 @@ function statutRouteur(r) {
     return { label: 'Expiré', cls: 'badge-danger' };
 }
 
+function statutConnexion(status) {
+    if (status === undefined) return { label: 'Connexion…', cls: 'badge-neutral' };
+    if (status === null) return { label: 'Statut inconnu', cls: 'badge-neutral' };
+    return status.connecte
+        ? { label: 'Connecté', cls: 'badge-success' }
+        : { label: 'Non connecté', cls: 'badge-danger' };
+}
+
 export default function Routers() {
     const navigate = useNavigate();
-    const { routers, packs, loading, error, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials } = useRoutersData();
+    const { routers, packs, loading, error, connectionStatus, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials } = useRoutersData();
     const { query } = useSearch();
     const normalizedQuery = stripAccents(query.trim());
     const filteredRouters = normalizedQuery
@@ -168,12 +176,14 @@ export default function Routers() {
             <div className="routers-grid">
                 {filteredRouters.map((r) => {
                     const statut = statutRouteur(r);
+                    const connexion = statutConnexion(connectionStatus[r.id]);
                     return (
                         <div key={r.id} className="section-card router-card">
                             <div className="section-header">
                                 <div className="router-title-row">
                                     <h2>{r.nom}</h2>
                                     <span className={`badge ${statut.cls}`}>{statut.label}</span>
+                                    <span className={`badge ${connexion.cls}`}>{connexion.label}</span>
                                 </div>
                                 <div className="router-menu-wrap">
                                     <button

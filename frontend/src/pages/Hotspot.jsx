@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Ticket, Check, Download, RefreshCw } from 'lucide-react';
+import { Plus, Ticket, Check, Download, RefreshCw, Trash2 } from 'lucide-react';
 import { useHotspotData } from '../hooks/useHotspotData';
 import './Hotspot.css';
 
@@ -38,6 +38,7 @@ export default function Hotspot() {
         routers, selectedRouterId, setSelectedRouterId,
         batches, loading, error, profiles, currentRateLimit,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
+        deleteVoucher, deleteBatch,
     } = useHotspotData();
 
     const [showForm, setShowForm] = useState(false);
@@ -80,6 +81,38 @@ export default function Hotspot() {
             await sellVoucher(voucherId);
         } catch (err) {
             setActionError(err.response?.data?.detail || "Erreur lors de la vente du ticket.");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleDeleteVoucher(voucherId) {
+        if (!window.confirm('Supprimer ce ticket ? Cette action est définitive.')) return;
+        setBusy(true);
+        setActionError('');
+        try {
+            await deleteVoucher(voucherId);
+        } catch (err) {
+            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du ticket.");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleDeleteBatch(batchId) {
+        if (!window.confirm("Supprimer ce lot ? Les tickets déjà vendus seront conservés, les autres seront définitivement supprimés.")) return;
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            const res = await deleteBatch(batchId);
+            setActionInfo(
+                res.supprimes > 0
+                    ? `${res.supprimes} ticket(s) supprimé(s)${res.conserves_vendus ? `, ${res.conserves_vendus} conservé(s) (déjà vendus)` : ''}.`
+                    : "Aucun ticket supprimé : tous ont déjà été vendus."
+            );
+        } catch (err) {
+            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du lot.");
         } finally {
             setBusy(false);
         }
@@ -284,6 +317,9 @@ export default function Hotspot() {
                                 <button className="btn-secondary" onClick={() => downloadBatchPdf(batch.id)}>
                                     <Download size={14} /> PDF
                                 </button>
+                                <button className="btn-secondary router-menu-danger" disabled={busy} onClick={() => handleDeleteBatch(batch.id)}>
+                                    <Trash2 size={14} /> Supprimer le lot
+                                </button>
                             </div>
                         </div>
                         <div className="voucher-grid">
@@ -297,6 +333,11 @@ export default function Hotspot() {
                                     {v.statut === 'AVAILABLE' && (
                                         <button className="btn-secondary" disabled={busy} onClick={() => handleSell(v.id)}>
                                             <Check size={14} /> Vendre
+                                        </button>
+                                    )}
+                                    {v.statut !== 'USED' && (
+                                        <button className="icon-btn" disabled={busy} onClick={() => handleDeleteVoucher(v.id)} aria-label="Supprimer ce ticket">
+                                            <Trash2 size={14} />
                                         </button>
                                     )}
                                 </div>

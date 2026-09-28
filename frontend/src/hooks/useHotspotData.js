@@ -101,6 +101,18 @@ export function useHotspotData() {
         return res.data;
     }
 
+    async function deleteVoucher(voucherId) {
+        const res = await api.delete(`/hotspot/vouchers/${voucherId}`);
+        await fetchBatches();
+        return res.data;
+    }
+
+    async function deleteBatch(batchId) {
+        const res = await api.delete(`/hotspot/vouchers/batch/${batchId}`);
+        await fetchBatches();
+        return res.data;
+    }
+
     async function downloadBatchPdf(batchId) {
         const res = await api.get(`/hotspot/vouchers/batch/${batchId}/pdf`, { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
@@ -117,5 +129,6 @@ export function useHotspotData() {
         routers, selectedRouterId, setSelectedRouterId,
         batches, loading, error, profiles, currentRateLimit,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
+        deleteVoucher, deleteBatch,
     };
 }

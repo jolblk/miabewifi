@@ -6,6 +6,7 @@ export function useRoutersData() {
     const [packs, setPacks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [connectionStatus, setConnectionStatus] = useState({}); // { [routerId]: {connecte, actif} | null }
 
     const fetchAll = useCallback(() => {
         setLoading(true);
@@ -22,6 +23,32 @@ export function useRoutersData() {
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
+
+    // Sonde l'état de connexion de chaque routeur, comme le badge "Essai" mais
+    // pour le tunnel WireGuard. `null` = sondage en échec, `undefined` = pas encore reçu.
+    useEffect(() => {
+        if (routers.length === 0) return undefined;
+
+        let cancelled = false;
+        const poll = () => {
+            routers.forEach((r) => {
+                api.get(`/routers/${r.id}/status`)
+                    .then((res) => {
+                        if (!cancelled) setConnectionStatus((prev) => ({ ...prev, [r.id]: res.data }));
+                    })
+                    .catch(() => {
+                        if (!cancelled) setConnectionStatus((prev) => ({ ...prev, [r.id]: null }));
+                    });
+            });
+        };
+
+        poll();
+        const interval = setInterval(poll, 20000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [routers]);
 
     async function createRouter(nom) {
         const res = await api.post('/routers/', { nom });
@@ -55,5 +82,5 @@ export function useRoutersData() {
         return res.data;
     }
 
-    return { routers, packs, loading, error, fetchAll, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials };
+    return { routers, packs, loading, error, connectionStatus, fetchAll, createRouter, deleteRouter, regenerateRouter, activerPack, setMikrotikCredentials };
 }

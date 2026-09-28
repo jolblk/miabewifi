@@ -129,6 +129,63 @@ async def _remove_users_from_router(client: RouterOSClient, codes: list[str]) ->
     except Exception:
         logger.warning("Nettoyage des tickets impossible sur le routeur", exc_info=True)
 
+async def _delete_codes_from_router(client: RouterOSClient, codes: list[str]) -> None:
+    """Supprime ces codes du routeur s'ils y existent encore (idempotent).
+    Lève une erreur si une suppression échoue : mieux vaut ne rien retirer en base
+    que de perdre la trace d'un ticket qui reste actif sur le routeur."""
+    if not codes:
+        return
+    wanted = set(codes)
+    users = await client.get_hotspot_users()
+    to_delete = [u for u in users if u.get("name") in wanted]
+    if not to_delete:
+        return  # déjà absents du routeur (routeur réinitialisé, etc.)
+
+    active_by_user = {}
+    try:
+        active_by_user = {a.get("user"): a for a in await client.get_active_sessions()}
+    except Exception:
+        pass  # pas grave : couper la session immédiate n'est pas garanti, la suppression du compte suffit
+
+    sem = asyncio.Semaphore(ROUTER_CONCURRENCY)
+
+    async def _delete(u: dict):
+        async with sem:
+            session = active_by_user.get(u.get("name"))
+            if session:
+                try:
+                    await client.remove_active_session(session[".id"])
+                except Exception:
+                    pass
+            await client.delete_hotspot_user(u[".id"])
+
+    results = await asyncio.gather(*[_delete(u) for u in to_delete], return_exceptions=True)
+    errors = [r for r in results if isinstance(r, Exception)]
+    if errors:
+        raise errors[0]
+
+
+def _get_authorized_voucher(voucher_id: int, db: Session, current_user: models.User) -> models.Voucher:
+    voucher = (
+        db.query(models.Voucher)
+        .join(models.VoucherBatch)
+        .filter(models.Voucher.id == voucher_id, models.VoucherBatch.owner_id == current_user.id)
+        .first()
+    )
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Ticket introuvable.")
+    return voucher
+
+
+def _get_authorized_batch(batch_id: int, db: Session, current_user: models.User) -> models.VoucherBatch:
+    batch = (
+        db.query(models.VoucherBatch)
+        .filter(models.VoucherBatch.id == batch_id, models.VoucherBatch.owner_id == current_user.id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lot de tickets introuvable.")
+    return batch
 
 @router.post("/{router_id}/vouchers", response_model=schemas.VoucherBatchOut)
 async def create_voucher_batch(
@@ -355,3 +412,71 @@ def download_voucher_batch_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=tickets-{batch.id}.pdf"},
     )
+
+
+
+@router.delete("/vouchers/{voucher_id}")
+async def delete_voucher(
+    voucher_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Supprime un ticket non vendu (disponible ou expiré)."""
+    voucher = _get_authorized_voucher(voucher_id, db, current_user)
+    if voucher.statut == "USED":
+        raise HTTPException(
+            status_code=400,
+            detail="Ce ticket a déjà été vendu : il ne peut pas être supprimé, pour garder l'historique des ventes.",
+        )
+
+    db_router = _get_authorized_router(voucher.batch.router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            await _delete_codes_from_router(client, [voucher.code])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de supprimer ce ticket sur le MikroTik : {e}")
+
+    batch = voucher.batch
+    db.delete(voucher)
+    db.flush()
+
+    remaining = db.query(models.Voucher).filter(models.Voucher.batch_id == batch.id).count()
+    batch.quantite = remaining
+    if remaining == 0:
+        db.delete(batch)
+    db.commit()
+
+    return {"message": "Ticket supprimé."}
+
+
+@router.delete("/vouchers/batch/{batch_id}")
+async def delete_voucher_batch(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Supprime tous les tickets non vendus d'un lot. Les tickets déjà vendus sont
+    conservés (historique des ventes) ; le lot n'est retiré que s'il n'en reste aucun."""
+    batch = _get_authorized_batch(batch_id, db, current_user)
+    deletable = [v for v in batch.vouchers if v.statut != "USED"]
+    kept = len(batch.vouchers) - len(deletable)
+
+    if deletable:
+        db_router = _get_authorized_router(batch.router_id, db, current_user)
+        try:
+            async with _client_for(db_router) as client:
+                await _delete_codes_from_router(client, [v.code for v in deletable])
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Impossible de supprimer ces tickets sur le MikroTik : {e}")
+
+        for v in deletable:
+            db.delete(v)
+        db.flush()
+
+    remaining = db.query(models.Voucher).filter(models.Voucher.batch_id == batch.id).count()
+    batch.quantite = remaining
+    if remaining == 0:
+        db.delete(batch)
+    db.commit()
+
+    return {"supprimes": len(deletable), "conserves_vendus": kept}
