@@ -39,6 +39,8 @@ class ResetPasswordRequest(BaseModel):
 class RouterCreate(BaseModel):
     nom: str
     mode: Literal["new", "existing"] = "existing"
+    # Nom du Wi-Fi diffusé aux clients (mode "new" uniquement). Lettres, chiffres, espace . _ -
+    wifi_ssid: Optional[str] = Field(default=None, max_length=32, pattern=r"^[A-Za-z0-9 ._-]*$")
 
 class PortMappingOut(BaseModel):
     service_type: str
@@ -57,6 +59,8 @@ class RouterOut(BaseModel):
     trial_expires_at: datetime | None
     subscription_expires_at: datetime | None
     mikrotik_api_username: str | None = None
+    setup_mode: str | None = None
+    wifi_ssid: str | None = None
     ports: list[PortMappingOut] = []
 
     class Config:
@@ -96,6 +100,8 @@ class VoucherBatchCreate(BaseModel):
     profile_name: str
     prix_unitaire: float = Field(gt=0)
     quantite: int = Field(gt=0, le=500)
+    # Nombre de jours de validité APRÈS la 1re connexion. Vide = pas de limite calendaire.
+    validite_jours: Optional[int] = Field(default=None, ge=1, le=365)
 
 
 class SaleCreate(BaseModel):
@@ -117,6 +123,8 @@ class VoucherOut(BaseModel):
     code: str
     statut: str
     created_at: datetime
+    first_login_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
     sale: Optional[SaleOut] = None
 
     class Config:
@@ -129,7 +137,18 @@ class VoucherBatchOut(BaseModel):
     prix_unitaire: float
     quantite: int
     created_at: datetime
+    validite_jours: Optional[int] = None
+    limit_uptime: Optional[str] = None
     vouchers: list[VoucherOut] = []
 
     class Config:
         from_attributes = True
+
+
+class RateLimitUpdate(BaseModel):
+    # Format RouterOS "<envoi>/<téléchargement>", ex: "2M/2M" ou "512k/1M"
+    rate_limit: str = Field(pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
+
+
+class HotspotSetupRequest(BaseModel):
+    interface: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9 ._-]+$")

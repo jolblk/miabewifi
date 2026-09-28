@@ -1,4 +1,6 @@
+import asyncio
 import io
+import logging
 import secrets
 from datetime import datetime
 
@@ -12,8 +14,15 @@ from app import models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
+from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, load_login_page
+from app.sync import sync_router
+
+logger = logging.getLogger("miabewifi.hotspot")
 
 router = APIRouter(prefix="/hotspot", tags=["HotSpot"])
+
+# Nombre de créations de tickets envoyées en parallèle au routeur.
+ROUTER_CONCURRENCY = 5
 
 
 def _get_authorized_router(router_id: int, db: Session, current_user: models.User) -> models.Router:
@@ -46,9 +55,9 @@ async def list_hotspot_users(
     current_user: models.User = Depends(get_current_user),
 ):
     db_router = _get_authorized_router(router_id, db, current_user)
-    client = _client_for(db_router)
     try:
-        return await client.get_hotspot_users()
+        async with _client_for(db_router) as client:
+            return await client.get_hotspot_users()
     except Exception as e:
         raise HTTPException(
             status_code=502,
@@ -63,9 +72,9 @@ async def list_hotspot_profiles(
     current_user: models.User = Depends(get_current_user),
 ):
     db_router = _get_authorized_router(router_id, db, current_user)
-    client = _client_for(db_router)
     try:
-        return await client.get_hotspot_profiles()
+        async with _client_for(db_router) as client:
+            return await client.get_hotspot_profiles()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
 
@@ -77,15 +86,48 @@ async def list_active_sessions(
     current_user: models.User = Depends(get_current_user),
 ):
     db_router = _get_authorized_router(router_id, db, current_user)
-    client = _client_for(db_router)
     try:
-        return await client.get_active_sessions()
+        async with _client_for(db_router) as client:
+            return await client.get_active_sessions()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
 
 
 def _generate_voucher_code() -> str:
     return secrets.token_hex(4).upper()  # ex: "A1B2C3D4"
+
+
+def _generate_unique_codes(db: Session, quantite: int) -> list[str]:
+    """Génère `quantite` codes qui n'existent ni dans le lot ni déjà en base."""
+    codes: set[str] = set()
+    while len(codes) < quantite:
+        candidates = {_generate_voucher_code() for _ in range(quantite - len(codes))} - codes
+        taken = {
+            c for (c,) in db.query(models.Voucher.code).filter(models.Voucher.code.in_(candidates)).all()
+        }
+        codes |= candidates - taken
+    return list(codes)
+
+
+async def _remove_users_from_router(client: RouterOSClient, codes: list[str]) -> None:
+    """Annule la création de tickets sur le routeur (meilleur effort, sans jamais lever d'erreur)."""
+    if not codes:
+        return
+    try:
+        wanted = set(codes)
+        users = await client.get_hotspot_users()
+        sem = asyncio.Semaphore(ROUTER_CONCURRENCY)
+
+        async def _delete(user_id: str):
+            async with sem:
+                await client.delete_hotspot_user(user_id)
+
+        await asyncio.gather(
+            *[_delete(u[".id"]) for u in users if u.get("name") in wanted],
+            return_exceptions=True,
+        )
+    except Exception:
+        logger.warning("Nettoyage des tickets impossible sur le routeur", exc_info=True)
 
 
 @router.post("/{router_id}/vouchers", response_model=schemas.VoucherBatchOut)
@@ -95,56 +137,134 @@ async def create_voucher_batch(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Génère un lot de tickets. Tout ou rien : si un seul ticket ne peut pas être créé
+    sur le routeur, ceux déjà créés sont supprimés et rien n'est enregistré."""
     db_router = _get_authorized_router(router_id, db, current_user)
-    client = _client_for(db_router)
 
-    # Le forfait doit exister sur le routeur ; sa durée devient la limite de
-    # temps de connexion de chaque ticket (sinon un ticket n'expire jamais).
-    try:
-        profiles = await client.get_hotspot_profiles()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
-
-    profile = next((p for p in profiles if p.get("name") == data.profile_name), None)
-    if profile is None:
-        raise HTTPException(status_code=400, detail="Ce forfait n'existe pas sur le routeur.")
-
-    limit_uptime = profile.get("session-timeout")
-    if limit_uptime in (None, "", "0s", "00:00:00"):
-        limit_uptime = None
-
-    batch = models.VoucherBatch(
-        router_id=db_router.id,
-        owner_id=current_user.id,
-        profile_name=data.profile_name,
-        prix_unitaire=data.prix_unitaire,
-        quantite=data.quantite,
-    )
-    db.add(batch)
-    db.commit()
-    db.refresh(batch)
-
-    for _ in range(data.quantite):
-        code = _generate_voucher_code()
-
+    async with _client_for(db_router) as client:
+        # Le forfait doit exister sur le routeur ; sa durée devient la limite de
+        # temps de connexion de chaque ticket (sinon un ticket n'expire jamais).
         try:
-            await client.create_hotspot_user(
-                name=code,
-                password=code,
-                profile=data.profile_name,
-                limit_uptime=limit_uptime,
-            )
+            profiles = await client.get_hotspot_profiles()
         except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+        profile = next((p for p in profiles if p.get("name") == data.profile_name), None)
+        if profile is None:
+            raise HTTPException(status_code=400, detail="Ce forfait n'existe pas sur le routeur.")
+
+        limit_uptime = profile.get("session-timeout")
+        if limit_uptime in (None, "", "0s", "00:00:00"):
+            limit_uptime = None
+
+        codes = _generate_unique_codes(db, data.quantite)
+        sem = asyncio.Semaphore(ROUTER_CONCURRENCY)
+
+        async def _create(code: str):
+            async with sem:
+                await client.create_hotspot_user(
+                    name=code, password=code, profile=data.profile_name, limit_uptime=limit_uptime,
+                )
+
+        results = await asyncio.gather(*[_create(c) for c in codes], return_exceptions=True)
+        created = [c for c, r in zip(codes, results) if not isinstance(r, Exception)]
+        errors = [r for r in results if isinstance(r, Exception)]
+
+        if errors:
+            await _remove_users_from_router(client, created)
             raise HTTPException(
                 status_code=502,
-                detail=f"Échec de création sur le MikroTik : {e}",
+                detail=(
+                    f"Échec de création sur le MikroTik ({len(errors)} ticket(s) sur {len(codes)}) : "
+                    f"{errors[0]}. Aucun ticket n'a été enregistré, vous pouvez réessayer."
+                ),
             )
 
-        db.add(models.Voucher(batch_id=batch.id, code=code, statut="AVAILABLE"))
+        try:
+            batch = models.VoucherBatch(
+                router_id=db_router.id,
+                owner_id=current_user.id,
+                profile_name=data.profile_name,
+                prix_unitaire=data.prix_unitaire,
+                quantite=data.quantite,
+                validite_jours=data.validite_jours,
+                limit_uptime=limit_uptime,
+            )
+            db.add(batch)
+            db.flush()
+            db.add_all([models.Voucher(batch_id=batch.id, code=c, statut="AVAILABLE") for c in codes])
+            db.commit()
+        except Exception:
+            db.rollback()
+            await _remove_users_from_router(client, created)
+            raise HTTPException(
+                status_code=500,
+                detail="Les tickets n'ont pas pu être enregistrés. Rien n'a été créé, vous pouvez réessayer.",
+            )
 
-    db.commit()
     db.refresh(batch)
     return batch
+
+
+@router.post("/{router_id}/sync")
+async def sync_vouchers(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Met à jour à la demande l'état des tickets (connexions détectées, expirations)."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            return await sync_router(db, db_router, client)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+
+@router.post("/{router_id}/rate-limit")
+async def set_rate_limit(
+    router_id: int,
+    data: schemas.RateLimitUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Applique une limite de vitesse par client à tous les forfaits "Ticket-*"."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            profiles = await client.get_hotspot_profiles()
+            targets = [p for p in profiles if str(p.get("name", "")).startswith("Ticket-")]
+            if not targets:
+                raise HTTPException(status_code=400, detail="Aucun forfait \"Ticket-*\" sur ce routeur.")
+            for p in targets:
+                await client.update_hotspot_profile(p[".id"], {"rate-limit": data.rate_limit})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+    return {"rate_limit": data.rate_limit, "forfaits": [p["name"] for p in targets]}
+
+
+@router.post("/{router_id}/login-page")
+async def install_login_page(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Installe la page de connexion simplifiée (un seul champ : le code du ticket).
+    Remplace la page de connexion actuelle du HotSpot."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            await client.write_file(LOGIN_PAGE_ROUTER_FILE, load_login_page())
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impossible d'installer la page de connexion sur le routeur : {e}",
+        )
+    return {"message": "Page de connexion installée."}
+
 
 @router.get("/{router_id}/vouchers", response_model=list[schemas.VoucherBatchOut])
 def list_voucher_batches(
@@ -225,7 +345,10 @@ def download_voucher_batch_pdf(
     if not batch:
         raise HTTPException(status_code=404, detail="Lot de tickets introuvable.")
 
-    pdf_bytes = generate_vouchers_pdf(batch, batch.vouchers)
+    batch_router = db.query(models.Router).filter(models.Router.id == batch.router_id).first()
+    wifi_ssid = batch_router.wifi_ssid if batch_router else None
+
+    pdf_bytes = generate_vouchers_pdf(batch, batch.vouchers, wifi_ssid=wifi_ssid)
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

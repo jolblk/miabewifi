@@ -33,6 +33,7 @@ class Router(Base):
     mikrotik_api_password = Column(String, nullable=True)
     subscription_expires_at = Column(DateTime, nullable=True)  # nouveau champ
     setup_mode = Column(String, nullable=False, default="existing", server_default="existing")  # "new" ou "existing"
+    wifi_ssid = Column(String, nullable=True)  # nom du Wi-Fi configuré (mode "new")
 
     owner = relationship("User", back_populates="routers")
     ports = relationship("PortMapping", back_populates="router")
@@ -71,6 +72,8 @@ class VoucherBatch(Base):
     prix_unitaire = Column(Float, nullable=False)
     quantite = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    validite_jours = Column(Integer, nullable=True)  # validité calendaire, comptée dès la 1re connexion
+    limit_uptime = Column(String, nullable=True)     # durée de connexion cumulée (ex: "1d"), copiée du forfait
 
     vouchers = relationship("Voucher", back_populates="batch")
 
@@ -83,7 +86,9 @@ class Voucher(Base):
     code = Column(String, unique=True, index=True, nullable=False)
     statut = Column(String, default="AVAILABLE")  # AVAILABLE, USED, EXPIRED
     created_at = Column(DateTime, default=datetime.utcnow)
-    used_at = Column(DateTime, nullable=True)
+    used_at = Column(DateTime, nullable=True)  # date de vente
+    first_login_at = Column(DateTime, nullable=True)  # 1re connexion réelle du client (détectée par la synchro)
+    expires_at = Column(DateTime, nullable=True)      # fin de validité calendaire
 
     batch = relationship("VoucherBatch", back_populates="vouchers")
     sale = relationship("Sale", back_populates="voucher", uselist=False)

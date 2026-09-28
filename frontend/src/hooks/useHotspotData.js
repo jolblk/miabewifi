@@ -23,11 +23,11 @@ export function useHotspotData() {
         if (!selectedRouterId) {
             setBatches([]);
             setLoading(false);
-            return;
+            return Promise.resolve();
         }
         setLoading(true);
         setError(null);
-        api.get(`/hotspot/${selectedRouterId}/vouchers`)
+        return api.get(`/hotspot/${selectedRouterId}/vouchers`)
             .then((res) => setBatches(Array.isArray(res.data) ? res.data : []))
             .catch(() => {
                 setError("Impossible de charger les tickets de ce routeur.");
@@ -36,25 +36,43 @@ export function useHotspotData() {
             .finally(() => setLoading(false));
     }, [selectedRouterId]);
 
+    const fetchProfiles = useCallback(() => {
+        if (!selectedRouterId) {
+            setProfiles([]);
+            return Promise.resolve();
+        }
+        return api.get(`/hotspot/${selectedRouterId}/profiles`)
+            .then((res) => setProfiles(Array.isArray(res.data) ? res.data : []))
+            .catch(() => setProfiles([]));
+    }, [selectedRouterId]);
+
     useEffect(() => {
         fetchBatches();
     }, [fetchBatches]);
 
     useEffect(() => {
-        if (!selectedRouterId) {
-            setProfiles([]);
-            return;
-        }
-        api.get(`/hotspot/${selectedRouterId}/profiles`)
-            .then((res) => setProfiles(Array.isArray(res.data) ? res.data : []))
-            .catch(() => setProfiles([]));
-    }, [selectedRouterId]);
+        fetchProfiles();
+    }, [fetchProfiles]);
 
-    async function generateBatch(profileName, prixUnitaire, quantite) {
+    // À l'ouverture d'un routeur, on met discrètement l'état des tickets à jour
+    // (connexions détectées, tickets expirés). Une erreur ici n'est pas bloquante.
+    useEffect(() => {
+        if (!selectedRouterId) return;
+        api.post(`/hotspot/${selectedRouterId}/sync`)
+            .then(() => fetchBatches())
+            .catch(() => {});
+    }, [selectedRouterId, fetchBatches]);
+
+    // Limite de vitesse actuellement appliquée aux forfaits "Ticket-*" (ex: "2M/2M").
+    const currentRateLimit =
+        profiles.find((p) => String(p.name || '').startsWith('Ticket-') && p['rate-limit'])?.['rate-limit'] || '';
+
+    async function generateBatch(profileName, prixUnitaire, quantite, validiteJours) {
         const res = await api.post(`/hotspot/${selectedRouterId}/vouchers`, {
             profile_name: profileName,
             prix_unitaire: prixUnitaire,
             quantite,
+            validite_jours: validiteJours || null,
         });
         await fetchBatches();
         return res.data;
@@ -63,6 +81,23 @@ export function useHotspotData() {
     async function sellVoucher(voucherId) {
         const res = await api.post(`/hotspot/vouchers/${voucherId}/sell`, {});
         await fetchBatches();
+        return res.data;
+    }
+
+    async function syncNow() {
+        const res = await api.post(`/hotspot/${selectedRouterId}/sync`);
+        await fetchBatches();
+        return res.data;
+    }
+
+    async function applyRateLimit(rateLimit) {
+        const res = await api.post(`/hotspot/${selectedRouterId}/rate-limit`, { rate_limit: rateLimit });
+        await fetchProfiles();
+        return res.data;
+    }
+
+    async function installLoginPage() {
+        const res = await api.post(`/hotspot/${selectedRouterId}/login-page`);
         return res.data;
     }
 
@@ -80,7 +115,7 @@ export function useHotspotData() {
 
     return {
         routers, selectedRouterId, setSelectedRouterId,
-        batches, loading, error, profiles,
-        generateBatch, sellVoucher, downloadBatchPdf,
+        batches, loading, error, profiles, currentRateLimit,
+        generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
     };
 }

@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -10,13 +13,22 @@ from app import models
 from app.limiter import limiter
 from app.config import FRONTEND_ORIGINS
 from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot
+from app.sync import sync_loop
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="MIABEWIFI")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Synchronise régulièrement les tickets avec les routeurs (connexions, expirations).
+    sync_task = asyncio.create_task(sync_loop())
+    yield
+    sync_task.cancel()
+
+
+app = FastAPI(title="MIABEWIFI", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(notifications.router)

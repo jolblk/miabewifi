@@ -21,10 +21,17 @@ def create_router(
     private_key, public_key = wireguard.generate_keypair()
     wireguard_ip = wireguard.get_next_available_ip(db, models)
     api_password = mikrotik_scripts.generate_api_password()
+    # Le nom du Wi-Fi n'a de sens que pour un routeur configuré par MIABEWIFI ("new").
+    wifi_ssid = (
+        mikrotik_scripts.sanitize_ssid(router_data.wifi_ssid or router_data.nom)
+        if router_data.mode == "new"
+        else None
+    )
 
     new_router = models.Router(
         owner_id=current_user.id,
         nom=router_data.nom,
+        wifi_ssid=wifi_ssid,
         wireguard_ip=wireguard_ip,
         public_key=public_key,
         is_connected=False,
@@ -70,6 +77,7 @@ def create_router(
         private_key=private_key,
         wireguard_ip=wireguard_ip,
         api_password=api_password,
+        wifi_ssid=new_router.wifi_ssid,
     )
 
     return {"router": new_router, "config_script": config_script}
@@ -297,6 +305,7 @@ def regenerate_router_config(
         private_key=private_key,
         wireguard_ip=db_router.wireguard_ip,
         api_password=api_password,
+        wifi_ssid=db_router.wifi_ssid,
     )
 
     return {"router": db_router, "config_script": config_script}
@@ -380,11 +389,7 @@ async def provision_router(
     if not db_router.mikrotik_api_username or not db_router.mikrotik_api_password:
         raise HTTPException(status_code=400, detail="Identifiants API MikroTik non configurés pour ce routeur.")
 
-    client = RouterOSClient(
-        router_ip=db_router.wireguard_ip,
-        username=db_router.mikrotik_api_username,
-        password=decrypt(db_router.mikrotik_api_password),
-    )
+    client = _client_for(db_router)
 
     try:
         resource = await client.system_resource()
@@ -402,10 +407,16 @@ async def provision_router(
             detail=f"RouterOS {version or 'inconnu'} détecté : la version 7 ou plus récente est nécessaire. Mets à jour le routeur puis recommence.",
         )
 
+    return await _prepare_hotspot(client, db_router, version)
+
+
+async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, version: str) -> dict:
+    """Crée les forfaits par défaut manquants et, pour un routeur configuré par
+    MIABEWIFI, installe la page de connexion simplifiée (un seul champ)."""
     try:
         hotspot_servers = await client.get_hotspot_servers()
         if not hotspot_servers:
-            return {"version": version, "hotspot_present": False, "profiles_created": []}
+            return {"version": version, "hotspot_present": False, "profiles_created": [], "login_page_installed": False}
 
         existing_names = {p.get("name") for p in await client.get_hotspot_profiles()}
         created = []
@@ -416,4 +427,113 @@ async def provision_router(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de préparer le HotSpot du routeur : {e}")
 
-    return {"version": version, "hotspot_present": True, "profiles_created": created}
+    # Page de connexion simplifiée : seulement sur un routeur que MIABEWIFI a configuré
+    # lui-même, pour ne jamais écraser la page personnalisée d'un routeur existant.
+    login_page_installed = False
+    if db_router.setup_mode == "new":
+        try:
+            await client.write_file(mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE, mikrotik_scripts.load_login_page())
+            login_page_installed = True
+        except Exception:
+            login_page_installed = False  # non bloquant : la page par défaut du routeur reste utilisable
+
+    return {
+        "version": version,
+        "hotspot_present": True,
+        "profiles_created": created,
+        "login_page_installed": login_page_installed,
+    }
+
+
+def _authorized_router_with_creds(router_id: int, db: Session, current_user: models.User) -> models.Router:
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+    if not db_router.mikrotik_api_username or not db_router.mikrotik_api_password:
+        raise HTTPException(status_code=400, detail="Identifiants API MikroTik non configurés pour ce routeur.")
+    return db_router
+
+
+def _client_for(db_router: models.Router) -> RouterOSClient:
+    return RouterOSClient(
+        router_ip=db_router.wireguard_ip,
+        username=db_router.mikrotik_api_username,
+        password=decrypt(db_router.mikrotik_api_password),
+    )
+
+
+@router.get("/{router_id}/lan-interfaces")
+async def list_lan_interfaces(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Interfaces sur lesquelles un HotSpot peut être créé (celles qui ont une adresse IP
+    locale). Sert à ajouter un HotSpot sur un routeur déjà en service."""
+    db_router = _authorized_router_with_creds(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            interfaces = await client.get_interfaces()
+            addresses = await client.get_ip_addresses()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+    with_ip = {a.get("interface") for a in addresses if a.get("disabled") != "true"}
+    result = []
+    for itf in interfaces:
+        name = itf.get("name")
+        if not name or name not in with_ip or name == "wg-miabewifi":
+            continue
+        if itf.get("type") not in ("bridge", "ether", "vlan"):
+            continue
+        result.append({"name": name, "type": itf.get("type")})
+    return result
+
+
+@router.post("/{router_id}/setup-hotspot")
+async def setup_hotspot(
+    router_id: int,
+    data: schemas.HotspotSetupRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Ajoute un HotSpot sur une interface d'un routeur déjà en service.
+    Les appareils connectés à cette interface devront ensuite saisir un ticket pour accéder à Internet."""
+    db_router = _authorized_router_with_creds(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            resource = await client.system_resource()
+            version = str(resource.get("version", ""))
+
+            if await client.get_hotspot_servers():
+                raise HTTPException(status_code=400, detail="Un HotSpot existe déjà sur ce routeur.")
+
+            addresses = await client.get_ip_addresses()
+            addr = next(
+                (a for a in addresses if a.get("interface") == data.interface and a.get("disabled") != "true"),
+                None,
+            )
+            if not addr:
+                raise HTTPException(status_code=400, detail="Cette interface n'a pas d'adresse IP.")
+            hotspot_address = addr["address"].split("/")[0]
+
+            await client.put("ip/hotspot/profile", {
+                "name": "miabewifi-hsprof",
+                "hotspot-address": hotspot_address,
+                "login-by": "cookie,http-chap,http-pap",
+            })
+            await client.put("ip/hotspot", {
+                "name": "miabewifi-hotspot",
+                "interface": data.interface,
+                "address-pool": "none",
+                "profile": "miabewifi-hsprof",
+            })
+            return await _prepare_hotspot(client, db_router, version)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de créer le HotSpot : {e}")

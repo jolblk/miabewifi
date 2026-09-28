@@ -6,6 +6,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.colors import HexColor
 
+from app.ros_utils import format_duration_fr, parse_ros_duration
+
 
 def _qr_image(data: str):
     img = qrcode.make(data)
@@ -15,17 +17,30 @@ def _qr_image(data: str):
     return ImageReader(buffer)
 
 
-def generate_vouchers_pdf(batch, vouchers) -> bytes:
+def _fit_font_size(c, text: str, font: str, size: float, max_width: float, min_size: float = 6) -> float:
+    """Réduit la taille de police jusqu'à ce que `text` tienne dans max_width."""
+    while size > min_size and c.stringWidth(text, font, size) > max_width:
+        size -= 0.5
+    return size
+
+
+def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> bytes:
+    """Planche de tickets à découper. Chaque ticket indique le code, le prix, la durée,
+    la validité, le nom du Wi-Fi et comment se connecter."""
     buffer = io.BytesIO()
     page_width, page_height = A4
     c = canvas.Canvas(buffer, pagesize=A4)
 
-    ticket_width = 60 * mm
-    ticket_height = 35 * mm
-    margin = 10 * mm
+    ticket_width = 62 * mm
+    ticket_height = 42 * mm
+    margin = 8 * mm
+    pad = 2 * mm
     cols = int((page_width - 2 * margin) // ticket_width)
     rows = int((page_height - 2 * margin) // ticket_height)
     per_page = max(cols * rows, 1)
+
+    duree = format_duration_fr(parse_ros_duration(batch.limit_uptime)) if batch.limit_uptime else None
+    validite = f"Valable {batch.validite_jours} j après la 1re connexion" if batch.validite_jours else None
 
     for index, voucher in enumerate(vouchers):
         position_on_page = index % per_page
@@ -37,19 +52,51 @@ def generate_vouchers_pdf(batch, vouchers) -> bytes:
 
         x = margin + col * ticket_width
         y = page_height - margin - (row + 1) * ticket_height
+        top = y + ticket_height
 
+        c.setLineWidth(0.5)
         c.rect(x, y, ticket_width, ticket_height)
 
-        qr_size = 25 * mm
-        qr_img = _qr_image(voucher.code)
-        c.drawImage(qr_img, x + 3 * mm, y + 5 * mm, width=qr_size, height=qr_size)
+        # QR code à gauche
+        qr_size = 20 * mm
+        c.drawImage(_qr_image(voucher.code), x + pad, top - pad - qr_size, width=qr_size, height=qr_size)
 
-        text_x = x + qr_size + 6 * mm
+        # Colonne de droite : forfait, code, prix, durée, validité
+        text_x = x + pad + qr_size + 3 * mm
+        text_w = ticket_width - (text_x - x) - pad
+
+        name_font = _fit_font_size(c, batch.profile_name, "Helvetica-Bold", 9, text_w)
+        c.setFont("Helvetica-Bold", name_font)
+        c.drawString(text_x, top - 6 * mm, batch.profile_name)
+
+        code_font = _fit_font_size(c, voucher.code, "Courier-Bold", 13, text_w)
+        c.setFont("Courier-Bold", code_font)
+        c.drawString(text_x, top - 12 * mm, voucher.code)
+
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(text_x, y + ticket_height - 8 * mm, batch.profile_name)
-        c.setFont("Helvetica", 9)
-        c.drawString(text_x, y + ticket_height - 14 * mm, f"Code: {voucher.code}")
-        c.drawString(text_x, y + ticket_height - 20 * mm, f"{batch.prix_unitaire:.0f} FCFA")
+        c.drawString(text_x, top - 18 * mm, f"{batch.prix_unitaire:.0f} FCFA")
+
+        if duree:
+            c.setFont("Helvetica", 7)
+            c.drawString(text_x, top - 22 * mm, f"{duree} de connexion")
+
+        # Bas du ticket : validité, Wi-Fi et comment se connecter
+        full_w = ticket_width - 2 * pad
+        bottom_y = top - 27 * mm
+        if validite:
+            c.setFont("Helvetica", _fit_font_size(c, validite, "Helvetica", 6.5, full_w, 5.5))
+            c.drawString(x + pad, bottom_y, validite)
+            bottom_y -= 3.2 * mm
+        if wifi_ssid:
+            wifi_line = f"Wi-Fi : {wifi_ssid}"
+            c.setFont("Helvetica-Bold", _fit_font_size(c, wifi_line, "Helvetica-Bold", 7.5, full_w, 5.5))
+            c.drawString(x + pad, bottom_y, wifi_line)
+            bottom_y -= 3.2 * mm
+        c.setFont("Helvetica", 6)
+        howto = "1. Connectez-vous au Wi-Fi. 2. Ouvrez une page web. 3. Saisissez le code ci-dessus (dans Nom d'utilisateur ET Mot de passe si on vous demande les deux)."
+        for line in _wrap_text(c, howto, "Helvetica", 6, full_w)[:3]:
+            c.drawString(x + pad, bottom_y, line)
+            bottom_y -= 2.8 * mm
 
     c.save()
     buffer.seek(0)

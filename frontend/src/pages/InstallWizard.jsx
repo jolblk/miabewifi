@@ -12,6 +12,11 @@ const STEP_LABELS = {
 };
 
 const RECOMMENDED_PACK_ID = '30j';
+
+// Nom de Wi-Fi accepté par le routeur : lettres, chiffres, espace, point, tiret, tiret bas.
+function sanitizeSsid(value) {
+    return value.replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 32);
+}
 const POLL_INTERVAL_MS = 4000;
 
 export default function InstallWizard() {
@@ -30,6 +35,9 @@ export default function InstallWizard() {
     const [provisionError, setProvisionError] = useState('');
     const [provisionInfo, setProvisionInfo] = useState(null);
     const [packs, setPacks] = useState([]);
+    const [wifiSsid, setWifiSsid] = useState('');
+    const [lanInterfaces, setLanInterfaces] = useState([]);
+    const [lanInterface, setLanInterface] = useState('');
     const [helpOpen, setHelpOpen] = useState(false);
     const [helpMessage, setHelpMessage] = useState('');
     const [helpSent, setHelpSent] = useState(false);
@@ -56,6 +64,17 @@ export default function InstallWizard() {
 
         return () => clearInterval(pollRef.current);
     }, [step, router]);
+
+    // Routeur "déjà en service" sans HotSpot : on propose d'en créer un sur l'une de ses interfaces.
+    useEffect(() => {
+        if (step !== 4 || !router || !provisionInfo || provisionInfo.hotspot_present) return;
+        api.get(`/routers/${router.id}/lan-interfaces`)
+            .then((res) => {
+                setLanInterfaces(res.data);
+                if (res.data.length > 0) setLanInterface(res.data[0].name);
+            })
+            .catch(() => setLanInterfaces([]));
+    }, [step, router, provisionInfo]);
 
     // Après 45 secondes sans connexion, on affiche des pistes concrètes
     // au lieu de laisser le client face à un simple message qui tourne.
@@ -95,7 +114,9 @@ export default function InstallWizard() {
         setBusy(true);
         setError('');
         try {
-            const res = await api.post('/routers/', { nom: nom.trim(), mode });
+            const payload = { nom: nom.trim(), mode };
+            if (mode === 'new') payload.wifi_ssid = sanitizeSsid(wifiSsid.trim() || nom.trim());
+            const res = await api.post('/routers/', payload);
             setRouter(res.data.router);
             setScript(res.data.config_script);
             setStep(2);
@@ -134,6 +155,21 @@ export default function InstallWizard() {
             setHelpSent(true);
         } catch {
             setHelpSent(true); // on affiche quand même une confirmation rassurante côté utilisateur
+        }
+    }
+
+    async function handleSetupHotspot() {
+        if (!lanInterface) return;
+        if (!window.confirm(`Créer un HotSpot sur « ${lanInterface} » ? Tous les appareils connectés à cette interface devront saisir un ticket pour accéder à Internet.`)) return;
+        setBusy(true);
+        setError('');
+        try {
+            const res = await api.post(`/routers/${router.id}/setup-hotspot`, { interface: lanInterface });
+            setProvisionInfo(res.data);
+        } catch (err) {
+            setError(err.response?.data?.detail || "Impossible de créer le HotSpot.");
+        } finally {
+            setBusy(false);
         }
     }
 
@@ -181,15 +217,33 @@ export default function InstallWizard() {
                         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '8px 0' }}>
                             <input type="radio" name="mode" value="new" checked={mode === 'new'} onChange={() => setMode('new')} />
                             <span>
-                                <strong>Neuf ou remis à zéro</strong> — MIABEWIFI configure le réseau et le HotSpot pour toi.
+                                <strong>Neuf ou remis à zéro</strong> — MIABEWIFI configure le réseau, le Wi-Fi et le HotSpot pour toi.
+                                C'est le choix à faire pour vendre des tickets.
                             </span>
                         </label>
                         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '8px 0' }}>
                             <input type="radio" name="mode" value="existing" checked={mode === 'existing'} onChange={() => setMode('existing')} />
                             <span>
-                                <strong>Déjà en service</strong> — ta configuration actuelle n'est pas modifiée.
+                                <strong>Déjà en service</strong> — ta configuration actuelle n'est pas modifiée et aucun HotSpot
+                                n'est créé automatiquement (tu pourras en ajouter un à la fin si besoin).
                             </span>
                         </label>
+                        {mode === 'new' && (
+                            <>
+                                <p className="wizard-hint">Nom du Wi-Fi que verront tes clients :</p>
+                                <input
+                                    className="text-input wizard-input"
+                                    type="text"
+                                    value={wifiSsid}
+                                    onChange={(e) => setWifiSsid(sanitizeSsid(e.target.value))}
+                                    placeholder={sanitizeSsid(nom.trim()) || 'MIABEWIFI'}
+                                    maxLength={32}
+                                />
+                                <p className="wizard-hint wizard-hint-small">
+                                    Le Wi-Fi est ouvert (sans mot de passe) : les clients se connectent, puis saisissent leur ticket.
+                                </p>
+                            </>
+                        )}
                         <button className="btn-primary wizard-btn-main" type="submit" disabled={busy || !nom.trim() || !mode}>
                             {busy ? 'Création...' : 'Continuer'}
                         </button>
@@ -200,8 +254,14 @@ export default function InstallWizard() {
             {step === 2 && (
                 <div className="wizard-card">
                     <h1>Configure ton routeur</h1>
+                    {mode === 'new' && (
+                        <p className="wizard-hint">
+                            <strong>Utilise un câble Ethernet</strong> entre ton ordinateur et le routeur : à la fin du
+                            script, le Wi-Fi du routeur est renommé et une connexion Wi-Fi serait coupée.
+                        </p>
+                    )}
                     <p className="wizard-hint">
-                        Connecte-toi d'abord au réseau de ton routeur (câble Ethernet, ou son Wi-Fi
+                        Connecte-toi d'abord au réseau de ton routeur (câble Ethernet de préférence, ou son Wi-Fi
                         par défaut), puis clique ci-dessous : ça ouvre la page de configuration de
                         ton routeur directement dans un nouvel onglet — aucun logiciel à installer.
                     </p>
@@ -299,10 +359,35 @@ export default function InstallWizard() {
                     <PartyPopper size={40} className="wizard-success-icon" />
                     <h1>Choisis ton forfait</h1>
                     {provisionInfo && !provisionInfo.hotspot_present && (
-                        <p className="error-text">
-                            Aucun HotSpot n'a été détecté sur ce routeur : tu ne pourras pas générer de tickets
-                            tant qu'il n'est pas activé. Utilise "Besoin d'aide ?" pour être accompagné.
-                        </p>
+                        <div>
+                            <p className="error-text">
+                                Aucun HotSpot n'a été détecté sur ce routeur : tu ne pourras pas générer de tickets
+                                tant qu'il n'est pas activé.
+                            </p>
+                            {lanInterfaces.length > 0 ? (
+                                <>
+                                    <p className="wizard-hint">
+                                        Choisis le réseau sur lequel tes clients se connectent (en général « bridge ») :
+                                    </p>
+                                    <select
+                                        className="text-input wizard-input"
+                                        value={lanInterface}
+                                        onChange={(e) => setLanInterface(e.target.value)}
+                                    >
+                                        {lanInterfaces.map((i) => (
+                                            <option key={i.name} value={i.name}>{i.name} ({i.type})</option>
+                                        ))}
+                                    </select>
+                                    <button className="btn-secondary wizard-copy-btn" disabled={busy} onClick={handleSetupHotspot}>
+                                        Créer le HotSpot sur ce réseau
+                                    </button>
+                                </>
+                            ) : (
+                                <p className="wizard-hint">
+                                    Utilise « Besoin d'aide ? » pour être accompagné, ou recommence avec l'option « Neuf ou remis à zéro ».
+                                </p>
+                            )}
+                        </div>
                     )}
                     <p className="wizard-hint">
                         Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.

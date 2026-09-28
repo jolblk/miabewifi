@@ -34,6 +34,10 @@ if not SERVER_PUBLIC_KEY:
 
 TUTORIAL_VIDEO_URL = os.getenv("TUTORIAL_VIDEO_URL", "")
 
+# Fréquence (en secondes) de la synchronisation des tickets avec les routeurs
+# (détection des connexions, expiration). 0 = désactivée.
+VOUCHER_SYNC_INTERVAL_SECONDS = int(os.getenv("VOUCHER_SYNC_INTERVAL_SECONDS", "300"))
+
 FRONTEND_ORIGINS = [
     origin.strip()
     for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
