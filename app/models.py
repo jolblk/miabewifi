@@ -32,6 +32,7 @@ class Router(Base):
     mikrotik_api_username = Column(String, nullable=True)
     mikrotik_api_password = Column(String, nullable=True)
     subscription_expires_at = Column(DateTime, nullable=True)  # nouveau champ
+    setup_mode = Column(String, nullable=False, default="existing", server_default="existing")  # "new" ou "existing"
 
     owner = relationship("User", back_populates="routers")
     ports = relationship("PortMapping", back_populates="router")

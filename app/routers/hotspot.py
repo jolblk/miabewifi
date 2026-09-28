@@ -98,6 +98,21 @@ async def create_voucher_batch(
     db_router = _get_authorized_router(router_id, db, current_user)
     client = _client_for(db_router)
 
+    # Le forfait doit exister sur le routeur ; sa durée devient la limite de
+    # temps de connexion de chaque ticket (sinon un ticket n'expire jamais).
+    try:
+        profiles = await client.get_hotspot_profiles()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+    profile = next((p for p in profiles if p.get("name") == data.profile_name), None)
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Ce forfait n'existe pas sur le routeur.")
+
+    limit_uptime = profile.get("session-timeout")
+    if limit_uptime in (None, "", "0s", "00:00:00"):
+        limit_uptime = None
+
     batch = models.VoucherBatch(
         router_id=db_router.id,
         owner_id=current_user.id,
@@ -113,7 +128,12 @@ async def create_voucher_batch(
         code = _generate_voucher_code()
 
         try:
-            await client.create_hotspot_user(name=code, password=code, profile=data.profile_name)
+            await client.create_hotspot_user(
+                name=code,
+                password=code,
+                profile=data.profile_name,
+                limit_uptime=limit_uptime,
+            )
         except Exception as e:
             raise HTTPException(
                 status_code=502,
@@ -125,7 +145,6 @@ async def create_voucher_batch(
     db.commit()
     db.refresh(batch)
     return batch
-
 
 @router.get("/{router_id}/vouchers", response_model=list[schemas.VoucherBatchOut])
 def list_voucher_batches(

@@ -7,11 +7,9 @@ from app.database import get_db
 from app import models, schemas, wireguard, wg_agent
 from app.dependencies import get_current_user
 from app.routeros_client import RouterOSClient
-from app.config import SERVER_PUBLIC_KEY
+from app import mikrotik_scripts
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
-
-SERVER_ENDPOINT = "195.35.48.80:51820"  # IP du VPS + port WireGuard standard
 
 
 @router.post("/", response_model=schemas.RouterConfigOut)
@@ -22,6 +20,7 @@ def create_router(
 ):
     private_key, public_key = wireguard.generate_keypair()
     wireguard_ip = wireguard.get_next_available_ip(db, models)
+    api_password = mikrotik_scripts.generate_api_password()
 
     new_router = models.Router(
         owner_id=current_user.id,
@@ -30,6 +29,9 @@ def create_router(
         public_key=public_key,
         is_connected=False,
         trial_expires_at=datetime.utcnow() + timedelta(days=3),
+        setup_mode=router_data.mode,
+        mikrotik_api_username=mikrotik_scripts.API_USERNAME,
+        mikrotik_api_password=encrypt(api_password),
     )
 
     db.add(new_router)
@@ -63,18 +65,12 @@ def create_router(
             detail=f"Impossible de préparer le serveur pour ce routeur : {e}",
         )
 
-    config_script = f"""/ip address remove [find interface=wg-miabewifi]
-/interface/wireguard remove [find name=wg-miabewifi]
-
-/interface/wireguard
-add name=wg-miabewifi listen-port=51820 private-key="{private_key}"
-
-/interface/wireguard/peers
-add interface=wg-miabewifi public-key="{SERVER_PUBLIC_KEY}" endpoint-address={SERVER_ENDPOINT.split(':')[0]} endpoint-port={SERVER_ENDPOINT.split(':')[1]} allowed-address=10.10.0.0/24 persistent-keepalive=25s
-
-/ip/address
-add address={wireguard_ip}/24 interface=wg-miabewifi
-"""
+    config_script = mikrotik_scripts.build_config_script(
+        mode=new_router.setup_mode,
+        private_key=private_key,
+        wireguard_ip=wireguard_ip,
+        api_password=api_password,
+    )
 
     return {"router": new_router, "config_script": config_script}
 
@@ -277,6 +273,7 @@ def regenerate_router_config(
 
     # Génère une NOUVELLE paire de clés (l'ancienne devient invalide)
     private_key, public_key = wireguard.generate_keypair()
+    api_password = mikrotik_scripts.generate_api_password()
 
     try:
         if old_public_key:
@@ -290,24 +287,19 @@ def regenerate_router_config(
 
     db_router.public_key = public_key
     db_router.is_connected = False
+    db_router.mikrotik_api_username = mikrotik_scripts.API_USERNAME
+    db_router.mikrotik_api_password = encrypt(api_password)
     db.commit()
     db.refresh(db_router)
 
-    config_script = f"""/ip address remove [find interface=wg-miabewifi]
-/interface/wireguard remove [find name=wg-miabewifi]
-
-/interface/wireguard
-add name=wg-miabewifi listen-port=51820 private-key="{private_key}"
-
-/interface/wireguard/peers
-add interface=wg-miabewifi public-key="{SERVER_PUBLIC_KEY}" endpoint-address={SERVER_ENDPOINT.split(':')[0]} endpoint-port={SERVER_ENDPOINT.split(':')[1]} allowed-address=10.10.0.0/24 persistent-keepalive=25s
-
-/ip/address
-add address={db_router.wireguard_ip}/24 interface=wg-miabewifi
-"""
+    config_script = mikrotik_scripts.build_config_script(
+        mode=db_router.setup_mode,
+        private_key=private_key,
+        wireguard_ip=db_router.wireguard_ip,
+        api_password=api_password,
+    )
 
     return {"router": db_router, "config_script": config_script}
-
 @router.post("/{router_id}/activer-pack")
 def activer_pack(
     router_id: int,
@@ -365,3 +357,63 @@ def activer_pack(
         "nouveau_solde": current_user.solde,
         "subscription_expires_at": db_router.subscription_expires_at,
     }
+
+
+
+@router.post("/{router_id}/provision")
+async def provision_router(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Appelé automatiquement par l'assistant dès que le tunnel est établi :
+    vérifie que l'API répond, que RouterOS est en v7+, qu'un hotspot existe,
+    et crée les forfaits par défaut manquants."""
+    db_router = (
+        db.query(models.Router)
+        .filter(models.Router.id == router_id, models.Router.owner_id == current_user.id)
+        .first()
+    )
+    if not db_router:
+        raise HTTPException(status_code=404, detail="Routeur introuvable.")
+
+    if not db_router.mikrotik_api_username or not db_router.mikrotik_api_password:
+        raise HTTPException(status_code=400, detail="Identifiants API MikroTik non configurés pour ce routeur.")
+
+    client = RouterOSClient(
+        router_ip=db_router.wireguard_ip,
+        username=db_router.mikrotik_api_username,
+        password=decrypt(db_router.mikrotik_api_password),
+    )
+
+    try:
+        resource = await client.system_resource()
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Le routeur est connecté mais son accès de gestion ne répond pas (le script a peut-être été collé partiellement). Détail : {e}",
+        )
+
+    version = str(resource.get("version", ""))
+    major = version.split(".")[0]
+    if not major.isdigit() or int(major) < 7:
+        raise HTTPException(
+            status_code=400,
+            detail=f"RouterOS {version or 'inconnu'} détecté : la version 7 ou plus récente est nécessaire. Mets à jour le routeur puis recommence.",
+        )
+
+    try:
+        hotspot_servers = await client.get_hotspot_servers()
+        if not hotspot_servers:
+            return {"version": version, "hotspot_present": False, "profiles_created": []}
+
+        existing_names = {p.get("name") for p in await client.get_hotspot_profiles()}
+        created = []
+        for profile in mikrotik_scripts.DEFAULT_TICKET_PROFILES:
+            if profile["name"] not in existing_names:
+                await client.create_hotspot_profile(profile)
+                created.append(profile["name"])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de préparer le HotSpot du routeur : {e}")
+
+    return {"version": version, "hotspot_present": True, "profiles_created": created}

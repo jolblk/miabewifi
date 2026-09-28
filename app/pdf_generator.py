@@ -254,22 +254,18 @@ def generate_router_setup_card(router, video_url: str) -> bytes:
     c.showPage()
 
     # --- Page 5 : autoriser l'application à gérer le routeur ---
-    _page_header(c, page_width, page_height, "Autoriser MIABEWIFI", "Étape 3 sur 4")
+    _page_header(c, page_width, page_height, "Vérification automatique", "Étape 3 sur 4")
     y = _draw_intro(
         c, page_width, page_height, page_height - 35 * mm,
-        "Une dernière chose à activer sur le routeur pour que l'application "
-        "puisse créer et gérer vos accès Wi-Fi.",
+        "Il n'y a rien à faire sur cette page : MIABEWIFI s'occupe du reste.",
     )
     y = _draw_bullets(c, page_width, y, [
-        "Dans Winbox, menu \"IP\" puis \"Services\".",
-        "Repérez la ligne \"www-ssl\" et double-cliquez dessus.",
-        "Décochez la case \"Disabled\" si elle est cochée, puis validez avec OK "
-        "(si aucun certificat n'est proposé, laissez Winbox en créer un "
-        "automatiquement).",
-        "Sur l'application MIABEWIFI, dans les réglages de votre routeur, "
-        "saisissez un nom d'utilisateur et un mot de passe : ceux que vous "
-        "utilisez déjà pour vous connecter au routeur, ou un utilisateur "
-        "dédié créé via \"System\" puis \"Users\" dans Winbox.",
+        "Le script de l'étape précédente a déjà autorisé l'application à "
+        "gérer votre routeur : aucun réglage à saisir.",
+        "Dès que le routeur est connecté, l'application vérifie sa version "
+        "et prépare vos forfaits automatiquement.",
+        "Si un message d'erreur s'affiche dans l'application, suivez-le ou "
+        "utilisez le bouton \"Besoin d'aide ?\".",
     ])
     _page_footer(c, page_width, 5, total_pages)
     c.showPage()

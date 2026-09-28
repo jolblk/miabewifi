@@ -25,6 +25,10 @@ export default function InstallWizard() {
     const [copied, setCopied] = useState(false);
     const [connected, setConnected] = useState(false);
     const [longWait, setLongWait] = useState(false);
+    const [mode, setMode] = useState('');
+    const [tunnelUp, setTunnelUp] = useState(false);
+    const [provisionError, setProvisionError] = useState('');
+    const [provisionInfo, setProvisionInfo] = useState(null);
     const [packs, setPacks] = useState([]);
     const [helpOpen, setHelpOpen] = useState(false);
     const [helpMessage, setHelpMessage] = useState('');
@@ -41,9 +45,9 @@ export default function InstallWizard() {
                 const res = await api.get(`/routers/${router.id}/status`);
                 if (res.data.connecte) {
                     clearInterval(pollRef.current);
-                    setConnected(true);
+                    setTunnelUp(true);
                     api.get('/packs/').then((r) => setPacks(r.data)).catch(() => setPacks([]));
-                    setTimeout(() => setStep(4), 1200);
+                    runProvision(router.id);
                 }
             } catch {
                 // on ignore une erreur ponctuelle de sondage, on réessaie au prochain tick
@@ -62,13 +66,36 @@ export default function InstallWizard() {
         return () => clearTimeout(timeout);
     }, [step]);
 
+    // Juste après la connexion du tunnel, l'API du routeur peut mettre quelques
+    // secondes à répondre : on réessaie automatiquement avant d'afficher une erreur.
+    async function runProvision(routerId) {
+        setProvisionError('');
+        for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+                const res = await api.post(`/routers/${routerId}/provision`);
+                setProvisionInfo(res.data);
+                setConnected(true);
+                setTimeout(() => setStep(4), 1200);
+                return;
+            } catch (err) {
+                const detail = err.response?.data?.detail;
+                // 400 = version RouterOS trop ancienne : inutile de réessayer.
+                if (err.response?.status === 400 || attempt === 4) {
+                    setProvisionError(detail || "Impossible de préparer le routeur. Réessaie dans un instant.");
+                    return;
+                }
+                await new Promise((r) => setTimeout(r, 3000));
+            }
+        }
+    }
+
     async function handleCreate(e) {
         e.preventDefault();
-        if (!nom.trim()) return;
+        if (!nom.trim() || !mode) return;
         setBusy(true);
         setError('');
         try {
-            const res = await api.post('/routers/', { nom: nom.trim() });
+            const res = await api.post('/routers/', { nom: nom.trim(), mode });
             setRouter(res.data.router);
             setScript(res.data.config_script);
             setStep(2);
@@ -150,7 +177,20 @@ export default function InstallWizard() {
                             placeholder="Nom du routeur"
                             autoFocus
                         />
-                        <button className="btn-primary wizard-btn-main" type="submit" disabled={busy || !nom.trim()}>
+                        <p className="wizard-hint">Dans quel état est ton routeur ?</p>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '8px 0' }}>
+                            <input type="radio" name="mode" value="new" checked={mode === 'new'} onChange={() => setMode('new')} />
+                            <span>
+                                <strong>Neuf ou remis à zéro</strong> — MIABEWIFI configure le réseau et le HotSpot pour toi.
+                            </span>
+                        </label>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '8px 0' }}>
+                            <input type="radio" name="mode" value="existing" checked={mode === 'existing'} onChange={() => setMode('existing')} />
+                            <span>
+                                <strong>Déjà en service</strong> — ta configuration actuelle n'est pas modifiée.
+                            </span>
+                        </label>
+                        <button className="btn-primary wizard-btn-main" type="submit" disabled={busy || !nom.trim() || !mode}>
                             {busy ? 'Création...' : 'Continuer'}
                         </button>
                     </form>
@@ -181,6 +221,11 @@ export default function InstallWizard() {
                     <p className="wizard-hint">
                         Copie ensuite ce script et colle-le dans ce terminal :
                     </p>
+                                        {mode === 'new' && (
+                        <p className="wizard-hint wizard-hint-small">
+                            À la fin, la page du routeur peut se couper ou se recharger : c'est normal, le HotSpot vient d'être activé.
+                        </p>
+                    )}
                     <pre className="config-script wizard-script">{script}</pre>
                     <button className="btn-secondary wizard-copy-btn" onClick={handleCopy}>
                         {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -204,7 +249,26 @@ export default function InstallWizard() {
 
             {step === 3 && (
                 <div className="wizard-card wizard-card-centered">
-                    {!connected ? (
+                    {connected ? (
+                        <>
+                            <Wifi className="wizard-success-icon" size={48} />
+                            <h1>Routeur prêt !</h1>
+                        </>
+                    ) : tunnelUp && provisionError ? (
+                        <>
+                            <h1>Routeur connecté, mais…</h1>
+                            <p className="error-text">{provisionError}</p>
+                            <button className="btn-secondary wizard-copy-btn" onClick={() => runProvision(router.id)}>
+                                Réessayer
+                            </button>
+                        </>
+                    ) : tunnelUp ? (
+                        <>
+                            <Loader2 className="wizard-spinner" size={48} />
+                            <h1>Routeur connecté</h1>
+                            <p className="wizard-hint">Préparation de ton HotSpot en cours...</p>
+                        </>
+                    ) : (
                         <>
                             <Loader2 className="wizard-spinner" size={48} />
                             <h1>En attente de connexion...</h1>
@@ -226,11 +290,6 @@ export default function InstallWizard() {
                                 </>
                             )}
                         </>
-                    ) : (
-                        <>
-                            <Wifi className="wizard-success-icon" size={48} />
-                            <h1>Routeur connecté !</h1>
-                        </>
                     )}
                 </div>
             )}
@@ -239,6 +298,12 @@ export default function InstallWizard() {
                 <div className="wizard-card">
                     <PartyPopper size={40} className="wizard-success-icon" />
                     <h1>Choisis ton forfait</h1>
+                    {provisionInfo && !provisionInfo.hotspot_present && (
+                        <p className="error-text">
+                            Aucun HotSpot n'a été détecté sur ce routeur : tu ne pourras pas générer de tickets
+                            tant qu'il n'est pas activé. Utilise "Besoin d'aide ?" pour être accompagné.
+                        </p>
+                    )}
                     <p className="wizard-hint">
                         Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.
                     </p>

@@ -5,6 +5,7 @@ export function useHotspotData() {
     const [routers, setRouters] = useState([]);
     const [selectedRouterId, setSelectedRouterId] = useState(null);
     const [batches, setBatches] = useState([]);
+    const [profiles, setProfiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -39,6 +40,16 @@ export function useHotspotData() {
         fetchBatches();
     }, [fetchBatches]);
 
+    useEffect(() => {
+        if (!selectedRouterId) {
+            setProfiles([]);
+            return;
+        }
+        api.get(`/hotspot/${selectedRouterId}/profiles`)
+            .then((res) => setProfiles(Array.isArray(res.data) ? res.data : []))
+            .catch(() => setProfiles([]));
+    }, [selectedRouterId]);
+
     async function generateBatch(profileName, prixUnitaire, quantite) {
         const res = await api.post(`/hotspot/${selectedRouterId}/vouchers`, {
             profile_name: profileName,
@@ -69,7 +80,7 @@ export function useHotspotData() {
 
     return {
         routers, selectedRouterId, setSelectedRouterId,
-        batches, loading, error,
+        batches, loading, error, profiles,
         generateBatch, sellVoucher, downloadBatchPdf,
     };
 }

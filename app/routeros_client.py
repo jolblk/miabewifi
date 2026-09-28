@@ -15,6 +15,13 @@ class RouterOSClient:
             response.raise_for_status()
             return response.json()
 
+    async def put(self, path: str, data: dict):
+        """Crée une entrée (méthode PUT de l'API REST RouterOS)."""
+        async with httpx.AsyncClient(verify=False, timeout=10) as client:
+            response = await client.put(f"{self.base_url}/{path}", auth=self.auth, json=data)
+            response.raise_for_status()
+            return response.json()
+
     async def post(self, path: str, data: dict):
         async with httpx.AsyncClient(verify=False, timeout=10) as client:
             response = await client.post(f"{self.base_url}/{path}", auth=self.auth, json=data)
@@ -23,6 +30,9 @@ class RouterOSClient:
 
     async def system_resource(self):
         return await self.get("system/resource")
+
+    async def get_hotspot_servers(self):
+        return await self.get("ip/hotspot")
 
     async def get_hotspot_users(self):
         return await self.get("ip/hotspot/user")
@@ -33,9 +43,11 @@ class RouterOSClient:
     async def get_active_sessions(self):
         return await self.get("ip/hotspot/active")
 
-    async def create_hotspot_user(self, name: str, password: str, profile: str):
-        return await self.post("ip/hotspot/user", {
-            "name": name,
-            "password": password,
-            "profile": profile,
-        })
+    async def create_hotspot_profile(self, data: dict):
+        return await self.put("ip/hotspot/user/profile", data)
+
+    async def create_hotspot_user(self, name: str, password: str, profile: str, limit_uptime: str | None = None):
+        payload = {"name": name, "password": password, "profile": profile}
+        if limit_uptime:
+            payload["limit-uptime"] = limit_uptime
+        return await self.put("ip/hotspot/user", payload)

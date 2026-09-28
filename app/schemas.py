@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import quote_plus
 
 
@@ -38,6 +38,7 @@ class ResetPasswordRequest(BaseModel):
 
 class RouterCreate(BaseModel):
     nom: str
+    mode: Literal["new", "existing"] = "existing"
 
 class PortMappingOut(BaseModel):
     service_type: str

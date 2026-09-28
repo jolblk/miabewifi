@@ -12,7 +12,7 @@ function statutBadge(statut) {
 export default function Hotspot() {
     const {
         routers, selectedRouterId, setSelectedRouterId,
-        batches, loading, error,
+        batches, loading, error, profiles,
         generateBatch, sellVoucher, downloadBatchPdf,
     } = useHotspotData();
 
@@ -89,15 +89,20 @@ export default function Hotspot() {
 
             {showForm && (
                 <form className="section-card" onSubmit={handleGenerate}>
-                    <label className="field-label" htmlFor="profile-name">Profil HotSpot (nom exact sur le MikroTik)</label>
-                    <input
+                    <label className="field-label" htmlFor="profile-name">Forfait</label>
+                    <select
                         id="profile-name"
-                        type="text"
+                        className="text-input"
                         value={profileName}
                         onChange={(e) => setProfileName(e.target.value)}
-                        placeholder="Ex : 1H"
-                        className="text-input"
-                    />
+                    >
+                        <option value="">Choisir un forfait…</option>
+                        {profiles.map((p) => (
+                            <option key={p.name} value={p.name}>
+                                {p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}
+                            </option>
+                        ))}
+                    </select>
                     <label className="field-label" htmlFor="prix-unitaire">Prix unitaire (FCFA)</label>
                     <input
                         id="prix-unitaire"
