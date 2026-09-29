@@ -96,6 +96,24 @@ export function useHotspotData() {
         return res.data;
     }
 
+    async function createProfile(name, dureeValeur, dureeUnite, partage, rateLimit) {
+        const res = await api.post(`/hotspot/${selectedRouterId}/profiles`, {
+            name,
+            duree_valeur: dureeValeur,
+            duree_unite: dureeUnite,
+            partage,
+            rate_limit: rateLimit || null,
+        });
+        await fetchProfiles();
+        return res.data;
+    }
+
+    async function deleteProfile(profileId) {
+        const res = await api.delete(`/hotspot/${selectedRouterId}/profiles/${profileId}`);
+        await fetchProfiles();
+        return res.data;
+    }
+
     async function installLoginPage() {
         const res = await api.post(`/hotspot/${selectedRouterId}/login-page`);
         return res.data;
@@ -129,6 +147,6 @@ export function useHotspotData() {
         routers, selectedRouterId, setSelectedRouterId,
         batches, loading, error, profiles, currentRateLimit,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
-        deleteVoucher, deleteBatch,
+        deleteVoucher, deleteBatch, createProfile, deleteProfile,
     };
 }

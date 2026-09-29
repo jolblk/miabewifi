@@ -96,6 +96,9 @@ class RouterOSClient:
     async def update_hotspot_profile(self, profile_id: str, data: dict):
         return await self.patch(f"ip/hotspot/user/profile/{profile_id}", data)
 
+    async def delete_hotspot_profile(self, profile_id: str):
+        return await self.delete(f"ip/hotspot/user/profile/{profile_id}")
+
     async def create_hotspot_user(self, name: str, password: str, profile: str, limit_uptime: str | None = None):
         payload = {"name": name, "password": password, "profile": profile}
         if limit_uptime:

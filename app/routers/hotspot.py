@@ -14,7 +14,7 @@ from app import models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
-from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, load_login_page
+from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, load_login_page, DEFAULT_RATE_LIMIT
 from app.sync import sync_router
 
 logger = logging.getLogger("miabewifi.hotspot")
@@ -77,6 +77,57 @@ async def list_hotspot_profiles(
             return await client.get_hotspot_profiles()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+
+@router.post("/{router_id}/profiles")
+async def create_hotspot_profile(
+    router_id: int,
+    data: schemas.HotspotProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Crée un nouveau forfait (profil HotSpot) directement depuis l'interface,
+    sans passer par mikhmon ou Winbox."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    name = data.name.strip()
+    if not name.lower().startswith("ticket-"):
+        name = f"Ticket-{name}"
+
+    payload = {
+        "name": name,
+        "session-timeout": f"{data.duree_valeur}{data.duree_unite}",
+        "shared-users": str(data.partage),
+        "rate-limit": data.rate_limit or DEFAULT_RATE_LIMIT,
+    }
+    try:
+        async with _client_for(db_router) as client:
+            existing = await client.get_hotspot_profiles()
+            if any(p.get("name") == name for p in existing):
+                raise HTTPException(status_code=400, detail="Un forfait porte déjà ce nom.")
+            await client.create_hotspot_profile(payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de créer le forfait sur le routeur : {e}")
+    return payload
+
+
+@router.delete("/{router_id}/profiles/{profile_id}")
+async def delete_hotspot_profile(
+    router_id: int,
+    profile_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Supprime un forfait du routeur. Si des tickets encore actifs l'utilisent,
+    le routeur refusera la suppression et l'erreur sera remontée telle quelle."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            await client.delete_hotspot_profile(profile_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de supprimer ce forfait : {e}")
+    return {"message": "Forfait supprimé."}
 
 
 @router.get("/{router_id}/sessions")

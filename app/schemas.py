@@ -150,5 +150,13 @@ class RateLimitUpdate(BaseModel):
     rate_limit: str = Field(pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
 
 
+class HotspotProfileCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60, pattern=r"^[A-Za-z0-9 _-]+$")
+    duree_valeur: int = Field(gt=0, le=999)
+    duree_unite: Literal["h", "d"]
+    partage: int = Field(default=1, ge=1, le=20)
+    rate_limit: Optional[str] = Field(default=None, pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
+
+
 class HotspotSetupRequest(BaseModel):
     interface: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9 ._-]+$")

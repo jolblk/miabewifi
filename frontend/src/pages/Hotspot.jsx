@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Ticket, Check, Download, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X } from 'lucide-react';
 import { useHotspotData } from '../hooks/useHotspotData';
 import './Hotspot.css';
 
@@ -38,7 +38,7 @@ export default function Hotspot() {
         routers, selectedRouterId, setSelectedRouterId,
         batches, loading, error, profiles, currentRateLimit,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
-        deleteVoucher, deleteBatch,
+        deleteVoucher, deleteBatch, createProfile, deleteProfile,
     } = useHotspotData();
 
     const [showForm, setShowForm] = useState(false);
@@ -50,6 +50,12 @@ export default function Hotspot() {
     const [actionError, setActionError] = useState('');
     const [actionInfo, setActionInfo] = useState('');
     const [rateLimit, setRateLimit] = useState('');
+
+    const [showNewProfile, setShowNewProfile] = useState(false);
+    const [newProfileName, setNewProfileName] = useState('');
+    const [newProfileDureeValeur, setNewProfileDureeValeur] = useState('24');
+    const [newProfileDureeUnite, setNewProfileDureeUnite] = useState('h');
+    const [newProfilePartage, setNewProfilePartage] = useState('1');
 
     useEffect(() => {
         setRateLimit(currentRateLimit);
@@ -148,6 +154,46 @@ export default function Hotspot() {
         }
     }
 
+    async function handleCreateProfile(e) {
+        e.preventDefault();
+        if (!newProfileName.trim() || !newProfileDureeValeur) return;
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            const created = await createProfile(
+                newProfileName.trim(),
+                Number(newProfileDureeValeur),
+                newProfileDureeUnite,
+                Number(newProfilePartage) || 1,
+                rateLimit.trim() || null,
+            );
+            setProfileName(created.name);
+            setNewProfileName('');
+            setNewProfileDureeValeur('24');
+            setNewProfilePartage('1');
+            setShowNewProfile(false);
+        } catch (err) {
+            setActionError(err.response?.data?.detail || "Erreur lors de la création du forfait.");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleDeleteProfile(profile) {
+        if (!window.confirm(`Supprimer le forfait "${profile.name}" ? Les tickets déjà générés avec ce forfait continueront de fonctionner.`)) return;
+        setBusy(true);
+        setActionError('');
+        try {
+            await deleteProfile(profile['.id']);
+            if (profileName === profile.name) setProfileName('');
+        } catch (err) {
+            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du forfait.");
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function handleInstallLoginPage() {
         if (!window.confirm("Installer la page de connexion simplifiée (un seul champ : le code) ? Elle remplace la page de connexion actuelle de votre HotSpot.")) return;
         setBusy(true);
@@ -232,25 +278,115 @@ export default function Hotspot() {
                         Le client saisit un seul champ (le code) au lieu de deux. Installée automatiquement sur les
                         routeurs configurés par MIABEWIFI.
                     </p>
+
+                    {profiles.length > 0 && (
+                        <div style={{ marginTop: '1rem' }}>
+                            <label className="field-label">Forfaits existants</label>
+                            <div className="voucher-grid">
+                                {profiles.map((p) => (
+                                    <div key={p['.id']} className="voucher-pill">
+                                        <span>{p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}</span>
+                                        <button
+                                            type="button"
+                                            className="icon-btn"
+                                            disabled={busy}
+                                            aria-label={`Supprimer ${p.name}`}
+                                            onClick={() => handleDeleteProfile(p)}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </form>
             )}
 
             {showForm && (
                 <form className="section-card" onSubmit={handleGenerate}>
                     <label className="field-label" htmlFor="profile-name">Forfait</label>
-                    <select
-                        id="profile-name"
-                        className="text-input"
-                        value={profileName}
-                        onChange={(e) => setProfileName(e.target.value)}
-                    >
-                        <option value="">Choisir un forfait…</option>
-                        {profiles.map((p) => (
-                            <option key={p.name} value={p.name}>
-                                {p.name}{p['session-timeout'] ? ` — ${p['session-timeout']} de connexion` : ''}
-                            </option>
-                        ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <select
+                            id="profile-name"
+                            className="text-input"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                        >
+                            <option value="">Choisir un forfait…</option>
+                            {profiles.map((p) => (
+                                <option key={p.name} value={p.name}>
+                                    {p.name}{p['session-timeout'] ? ` — ${p['session-timeout']} de connexion` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => setShowNewProfile((v) => !v)}
+                        >
+                            {showNewProfile ? <X size={16} /> : <Plus size={16} />} Forfait
+                        </button>
+                    </div>
+
+                    {showNewProfile && (
+                        <div className="section-card" style={{ marginTop: '0.5rem' }}>
+                            <label className="field-label" htmlFor="new-profile-name">Nom du nouveau forfait</label>
+                            <input
+                                id="new-profile-name"
+                                className="text-input"
+                                placeholder="ex : 12h, WeekEnd, Illimite-1j"
+                                value={newProfileName}
+                                onChange={(e) => setNewProfileName(e.target.value)}
+                            />
+                            <p className="empty-hint">Le préfixe « Ticket- » est ajouté automatiquement si absent.</p>
+
+                            <label className="field-label" htmlFor="new-profile-duree">Durée de connexion cumulée</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    id="new-profile-duree"
+                                    type="number"
+                                    min="1"
+                                    max="999"
+                                    className="text-input"
+                                    style={{ maxWidth: 100 }}
+                                    value={newProfileDureeValeur}
+                                    onChange={(e) => setNewProfileDureeValeur(e.target.value)}
+                                />
+                                <select
+                                    className="text-input"
+                                    style={{ maxWidth: 140 }}
+                                    value={newProfileDureeUnite}
+                                    onChange={(e) => setNewProfileDureeUnite(e.target.value)}
+                                >
+                                    <option value="h">Heures</option>
+                                    <option value="d">Jours</option>
+                                </select>
+                            </div>
+
+                            <label className="field-label" htmlFor="new-profile-partage">Appareils simultanés autorisés</label>
+                            <input
+                                id="new-profile-partage"
+                                type="number"
+                                min="1"
+                                max="20"
+                                className="text-input"
+                                style={{ maxWidth: 100 }}
+                                value={newProfilePartage}
+                                onChange={(e) => setNewProfilePartage(e.target.value)}
+                            />
+
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={busy || !newProfileName.trim()}
+                                onClick={handleCreateProfile}
+                                style={{ marginTop: '0.5rem' }}
+                            >
+                                Créer ce forfait
+                            </button>
+                        </div>
+                    )}
                     <label className="field-label" htmlFor="prix-unitaire">Prix unitaire (FCFA)</label>
                     <input
                         id="prix-unitaire"
