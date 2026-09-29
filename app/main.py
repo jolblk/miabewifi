@@ -12,7 +12,7 @@ from app.database import engine, Base
 from app import models
 from app.limiter import limiter
 from app.config import FRONTEND_ORIGINS
-from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot
+from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot, hotspot_public
 from app.sync import sync_loop
 
 from fastapi.staticfiles import StaticFiles
@@ -42,12 +42,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# La page HotSpot est servie par le routeur du client (origine différente à chaque
+# installation) et n'utilise jamais de cookies/session : ouvrir le CORS uniquement
+# sur ces routes publiques est sans risque et évite de devoir lister chaque origine.
+@app.middleware("http")
+async def public_hotspot_cors(request: Request, call_next):
+    if request.url.path.startswith("/public/hotspot"):
+        if request.method == "OPTIONS":
+            from fastapi.responses import Response
+            response = Response(status_code=200)
+        else:
+            response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+    return await call_next(request)
+
 app.include_router(auth.router)
 app.include_router(routers_management.router)
 app.include_router(wallet.router)
 app.include_router(admin.router)
 app.include_router(support.router)
 app.include_router(hotspot.router)
+app.include_router(hotspot_public.router)
 @app.get("/health")
 def health_check():
     return {"status": "ok"}

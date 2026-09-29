@@ -14,7 +14,7 @@ from app import models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
-from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, load_login_page, DEFAULT_RATE_LIMIT
+from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, render_login_page, DEFAULT_RATE_LIMIT
 from app.sync import sync_router
 
 logger = logging.getLogger("miabewifi.hotspot")
@@ -365,7 +365,7 @@ async def install_login_page(
     db_router = _get_authorized_router(router_id, db, current_user)
     try:
         async with _client_for(db_router) as client:
-            await client.write_file(LOGIN_PAGE_ROUTER_FILE, load_login_page())
+            await client.write_file(LOGIN_PAGE_ROUTER_FILE, render_login_page(db_router.public_token))
     except Exception as e:
         raise HTTPException(
             status_code=502,

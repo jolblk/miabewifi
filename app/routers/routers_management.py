@@ -1,3 +1,5 @@
+import secrets
+
 from app.crypto import decrypt, encrypt
 from app.packs import PACKS
 from datetime import datetime, timedelta
@@ -39,6 +41,7 @@ def create_router(
         setup_mode=router_data.mode,
         mikrotik_api_username=mikrotik_scripts.API_USERNAME,
         mikrotik_api_password=encrypt(api_password),
+        public_token=secrets.token_urlsafe(16),
     )
 
     db.add(new_router)
@@ -411,8 +414,13 @@ async def provision_router(
 
 
 async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, version: str) -> dict:
-    """Crée les forfaits par défaut manquants et, pour un routeur configuré par
-    MIABEWIFI, installe la page de connexion simplifiée (un seul champ)."""
+    """Crée les forfaits par défaut manquants, autorise le paiement en libre-service
+    (walled garden) et, pour un routeur configuré par MIABEWIFI, installe la page de
+    connexion simplifiée (un seul champ)."""
+    if not db_router.public_token:
+        # Routeur créé avant l'ajout du paiement en libre-service : on complète maintenant.
+        db_router.public_token = secrets.token_urlsafe(16)
+
     try:
         hotspot_servers = await client.get_hotspot_servers()
         if not hotspot_servers:
@@ -424,6 +432,14 @@ async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, ver
             if profile["name"] not in existing_names:
                 await client.create_hotspot_profile(profile)
                 created.append(profile["name"])
+
+        # Autorise le client (avant qu'il soit connecté) à joindre l'API MIABEWIFI,
+        # seul moyen pour la page HotSpot de déclencher un paiement Flooz/T-Money.
+        walled_garden = await client.get_walled_garden()
+        if not any(w.get("comment") == mikrotik_scripts.WALLED_GARDEN_COMMENT for w in walled_garden):
+            await client.create_walled_garden_rule(
+                mikrotik_scripts.PUBLIC_API_HOST, mikrotik_scripts.WALLED_GARDEN_COMMENT,
+            )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de préparer le HotSpot du routeur : {e}")
 
@@ -432,7 +448,10 @@ async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, ver
     login_page_installed = False
     if db_router.setup_mode == "new":
         try:
-            await client.write_file(mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE, mikrotik_scripts.load_login_page())
+            await client.write_file(
+                mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE,
+                mikrotik_scripts.render_login_page(db_router.public_token),
+            )
             login_page_installed = True
         except Exception:
             login_page_installed = False  # non bloquant : la page par défaut du routeur reste utilisable

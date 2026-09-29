@@ -11,7 +11,7 @@ import secrets
 import unicodedata
 from pathlib import Path
 
-from app.config import SERVER_PUBLIC_KEY
+from app.config import SERVER_PUBLIC_KEY, PUBLIC_API_BASE_URL
 
 SERVER_HOST = "195.35.48.80"  # IP publique du VPS
 SERVER_PORT = "51820"         # port WireGuard du VPS
@@ -41,6 +41,10 @@ SSID_ALLOWED = re.compile(r"[^A-Za-z0-9 ._-]")
 LOGIN_PAGE_PATH = Path(__file__).parent / "templates" / "hotspot_login.html"
 LOGIN_PAGE_ROUTER_FILE = "hotspot/login.html"
 
+WALLED_GARDEN_COMMENT = "miabewifi-payment"
+# Domaine seul (sans schéma), pour la règle walled-garden : ex "app.195.35.48.80.nip.io"
+PUBLIC_API_HOST = PUBLIC_API_BASE_URL.split("://", 1)[-1].split("/", 1)[0]
+
 
 def sanitize_ssid(value: str | None) -> str:
     """Nettoie un nom de Wi-Fi : sans accents ni caractères spéciaux (sûr dans un script RouterOS),
@@ -52,8 +56,15 @@ def sanitize_ssid(value: str | None) -> str:
     return cleaned or DEFAULT_WIFI_SSID
 
 
-def load_login_page() -> str:
-    return LOGIN_PAGE_PATH.read_text(encoding="utf-8")
+def render_login_page(public_token: str) -> str:
+    """Page de connexion HotSpot, personnalisée pour CE routeur : les appels de paiement
+    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui."""
+    html = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
+    return (
+        html
+        .replace("__API_BASE__", PUBLIC_API_BASE_URL)
+        .replace("__PUBLIC_TOKEN__", public_token or "")
+    )
 
 
 def generate_api_password() -> str:

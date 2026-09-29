@@ -1,5 +1,7 @@
+import logging
 import time
 import httpx
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from slowapi import Limiter
@@ -11,7 +13,7 @@ from app.config import PAYGATE_AUTH_TOKEN
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
-
+logger = logging.getLogger("miabewifi.wallet")
 
 @router.post("/recharger")
 async def recharger(
@@ -124,6 +126,57 @@ async def retirer(
     return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}
 
 
+async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchase) -> None:
+    """Réserve un ticket disponible du forfait payé et le marque vendu à ce numéro.
+    En cas de rupture de stock au moment de la confirmation (rare : quelqu'un d'autre
+    a pris le dernier ticket entre-temps), rembourse automatiquement le client."""
+    rows_updated = (
+        db.query(models.HotspotPurchase)
+        .filter(models.HotspotPurchase.id == purchase.id, models.HotspotPurchase.statut == "en_attente")
+        .update({"statut": "en_cours"}, synchronize_session=False)
+    )
+    db.commit()
+    if rows_updated == 0:
+        return  # déjà traité par un autre appel webhook concurrent
+
+    voucher = (
+        db.query(models.Voucher)
+        .filter(models.Voucher.batch_id == purchase.batch_id, models.Voucher.statut == "AVAILABLE")
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+
+    if voucher is None:
+        purchase.statut = "en_rupture"
+        db.commit()
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "https://paygateglobal.com/api/v1/disburse",
+                    json={
+                        "auth_token": PAYGATE_AUTH_TOKEN,
+                        "phone_number": purchase.telephone,
+                        "amount": purchase.montant,
+                        "reason": "Remboursement MIABEWIFI - ticket épuisé",
+                        "reference": f"{purchase.identifier}-remb",
+                        "network": purchase.methode,
+                    },
+                )
+            purchase.statut = "rembourse"
+        except Exception:
+            logger.error("Remboursement automatique impossible pour l'achat %s", purchase.identifier)
+            purchase.statut = "echoue_remboursement"
+        db.commit()
+        return
+
+    voucher.statut = "USED"
+    voucher.used_at = datetime.utcnow()
+    db.add(models.Sale(voucher_id=voucher.id, montant=purchase.montant, vendu_par=None, acheteur_telephone=purchase.telephone))
+    purchase.statut = "confirme"
+    purchase.voucher_id = voucher.id
+    db.commit()
+
+
 @router.post("/webhook/paygate")
 @limiter.limit("30/minute")
 async def paygate_webhook(request: Request, payload: dict, db: Session = Depends(get_db)):
@@ -134,7 +187,15 @@ async def paygate_webhook(request: Request, payload: dict, db: Session = Depends
         return {"status": "ignored"}
 
     transaction = db.query(models.Transaction).filter(models.Transaction.identifier == identifier).first()
-    if not transaction or transaction.statut == "confirme":
+    purchase = None if transaction else (
+        db.query(models.HotspotPurchase).filter(models.HotspotPurchase.identifier == identifier).first()
+    )
+
+    if not transaction and not purchase:
+        return {"status": "ignored"}
+    if transaction and transaction.statut == "confirme":
+        return {"status": "ignored"}
+    if purchase and purchase.statut != "en_attente":
         return {"status": "ignored"}
 
     # Vérification server-to-server, comme sur wifi-hotspot
@@ -145,26 +206,32 @@ async def paygate_webhook(request: Request, payload: dict, db: Session = Depends
         )
         data = verification.json()
 
-    if data.get("status") == 0:
-        # Mise à jour atomique : ne réussit que si le statut est encore "en_attente".
-        # Empêche un double crédit si deux appels webhook arrivent en même temps.
-        rows_updated = (
-            db.query(models.Transaction)
-            .filter(
-                models.Transaction.identifier == identifier,
-                models.Transaction.statut != "confirme",
-            )
-            .update({"statut": "confirme"}, synchronize_session=False)
+    if data.get("status") != 0:
+        return {"status": "ok"}
+
+    if purchase:
+        await _confirm_hotspot_purchase(db, purchase)
+        return {"status": "ok"}
+
+    # Mise à jour atomique : ne réussit que si le statut est encore "en_attente".
+    # Empêche un double crédit si deux appels webhook arrivent en même temps.
+    rows_updated = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.identifier == identifier,
+            models.Transaction.statut != "confirme",
         )
-        db.commit()
+        .update({"statut": "confirme"}, synchronize_session=False)
+    )
+    db.commit()
 
-        if rows_updated == 0:
-            # Une autre requête a déjà traité cette transaction entre-temps.
-            return {"status": "already_processed"}
+    if rows_updated == 0:
+        # Une autre requête a déjà traité cette transaction entre-temps.
+        return {"status": "already_processed"}
 
-        user = db.query(models.User).filter(models.User.id == transaction.user_id).first()
-        user.solde += transaction.montant
-        db.commit()
+    user = db.query(models.User).filter(models.User.id == transaction.user_id).first()
+    user.solde += transaction.montant
+    db.commit()
 
     return {"status": "ok"}
 

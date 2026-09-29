@@ -9,11 +9,27 @@
   .card{background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);padding:28px 22px;width:92%;max-width:360px;text-align:center}
   h1{font-size:22px;margin:0 0 6px}
   p{margin:0 0 18px;color:#6b6478;font-size:14px}
-  input[type=text]{width:100%;box-sizing:border-box;padding:14px;font-size:20px;letter-spacing:3px;text-align:center;text-transform:uppercase;border:2px solid #e4e1ec;border-radius:10px}
-  input[type=text]:focus{outline:none;border-color:#7c3aed}
-  button{margin-top:14px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:#7c3aed;border:0;border-radius:10px}
+  input[type=text],input[type=tel]{width:100%;box-sizing:border-box;padding:14px;font-size:20px;letter-spacing:1px;text-align:center;border:2px solid #e4e1ec;border-radius:10px;margin-bottom:10px}
+  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:#7c3aed}
+  #code{letter-spacing:3px;text-transform:uppercase}
+  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:#7c3aed;border:0;border-radius:10px;cursor:pointer}
+  button.secondary{background:#fff;color:#7c3aed;border:2px solid #ece9f5}
+  button:disabled{opacity:.6;cursor:default}
   .err{color:#dc2626;font-size:14px;margin:0 0 12px}
+  .ok{color:#15803d;font-size:14px;margin:0 0 12px}
   .help{margin-top:16px;font-size:12px}
+  .link-btn{background:none;border:0;color:#7c3aed;font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
+  .offer{border:2px solid #e4e1ec;border-radius:10px;padding:12px;margin-bottom:10px;text-align:left;cursor:pointer}
+  .offer.is-selected{border-color:#7c3aed;background:#f7f5fb}
+  .offer .titre{font-weight:bold}
+  .offer .prix{color:#7c3aed;font-weight:bold;float:right}
+  .network-row{display:flex;gap:8px;margin-bottom:10px}
+  .network-row button{margin-top:0}
+  .network-row button.is-selected{background:#7c3aed;color:#fff}
+  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:#7c3aed;border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:#7c3aed;margin:6px 0 16px}
+  .hidden{display:none}
 </style>
 </head>
 <body>
@@ -24,38 +40,240 @@ $(if chap-id)
   <input type="hidden" name="dst" value="$(link-orig)">
 </form>
 <script src="/md5.js"></script>
-<script>
-function doLogin(){
-  var c = document.login.code.value.replace(/\s/g,'').toUpperCase();
-  if(!c){return false;}
-  document.sendin.username.value = c;
-  document.sendin.password.value = hexMD5('$(chap-id)' + c + '$(chap-challenge)');
-  document.sendin.submit();
-  return false;
-}
-</script>
 $(endif)
+<form name="login" action="$(link-login-only)" method="post" class="hidden">
+  <input type="hidden" name="dst" value="$(link-orig)">
+  <input type="hidden" name="username" value="">
+  <input type="hidden" name="password" value="">
+</form>
+
+<div class="card">
+
+  <div id="screen-home">
+    <h1>Connexion Wi-Fi</h1>
+    <p>Saisissez le code de votre ticket, ou payez directement ici</p>
+    $(if error)<div class="err">$(error)</div>$(endif)
+    <input id="code" type="text" placeholder="CODE" autocomplete="off" autocapitalize="characters">
+    <button type="button" onclick="submitCode()">Se connecter</button>
+    <button type="button" class="secondary" onclick="goTo('pay')">Payer par Flooz / T-Money</button>
+    <button type="button" class="link-btn" onclick="goTo('retrieve')">J'ai déjà payé, redonne-moi mon code</button>
+  </div>
+
+  <div id="screen-pay" class="hidden">
+    <h1>Choisir un forfait</h1>
+    <p>Le montant sera débité de votre compte mobile money</p>
+    <div id="offers-error" class="err hidden"></div>
+    <div id="offers-list"></div>
+    <div id="pay-form" class="hidden">
+      <div class="network-row">
+        <button type="button" id="net-flooz" onclick="selectNetwork('FLOOZ')">Flooz</button>
+        <button type="button" id="net-tmoney" onclick="selectNetwork('TMONEY')">T-Money</button>
+      </div>
+      <input id="pay-phone" type="tel" placeholder="Numéro de téléphone">
+      <div id="pay-error" class="err hidden"></div>
+      <button type="button" onclick="startPayment()">Payer maintenant</button>
+    </div>
+    <button type="button" class="link-btn" onclick="goTo('home')">Retour</button>
+  </div>
+
+  <div id="screen-wait" class="hidden">
+    <h1>Paiement en cours</h1>
+    <div class="spinner"></div>
+    <p id="wait-message">Valide la demande de paiement reçue sur ton téléphone…</p>
+    <div id="wait-error" class="err hidden"></div>
+    <button type="button" class="link-btn hidden" id="wait-retry" onclick="goTo('pay')">Réessayer</button>
+  </div>
+
+  <div id="screen-retrieve" class="hidden">
+    <h1>Retrouver mon code</h1>
+    <p>Entrez le numéro utilisé pour le paiement</p>
+    <input id="retrieve-phone" type="tel" placeholder="Numéro de téléphone">
+    <div id="retrieve-error" class="err hidden"></div>
+    <button type="button" onclick="doRetrieve()">Retrouver mon code</button>
+    <button type="button" class="link-btn" onclick="goTo('home')">Retour</button>
+  </div>
+
+  <div id="screen-code" class="hidden">
+    <h1>C'est prêt !</h1>
+    <p>Connexion automatique dans un instant… en cas de souci, voici votre code :</p>
+    <div class="code-box" id="code-display"></div>
+  </div>
+
+  <div class="help">Un problème ? Redémarrez le Wi-Fi de votre téléphone et réessayez.</div>
+</div>
+
 <script>
-function plainLogin(){
-  var c = document.login.code.value.replace(/\s/g,'').toUpperCase();
-  if(!c){return false;}
-  document.login.username.value = c;
-  document.login.password.value = c;
-  return true;
+var API_BASE = "__API_BASE__";
+var PUBLIC_TOKEN = "__PUBLIC_TOKEN__";
+var HAS_CHAP = document.forms["sendin"] !== undefined;
+var selectedBatchId = null;
+var selectedNetwork = null;
+var pollTimer = null;
+var pollDeadline = null;
+
+function goTo(name) {
+  ["home", "pay", "wait", "retrieve", "code"].forEach(function (s) {
+    document.getElementById("screen-" + s).classList.add("hidden");
+  });
+  document.getElementById("screen-" + name).classList.remove("hidden");
+  if (name === "pay") loadOffers();
+  if (pollTimer && name !== "wait") { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function doLoginWithCode(code) {
+  var c = code.replace(/\s/g, "").toUpperCase();
+  if (!c) return;
+  if (HAS_CHAP) {
+    document.sendin.username.value = c;
+    document.sendin.password.value = hexMD5("$(chap-id)" + c + "$(chap-challenge)");
+    document.getElementById("code-display").textContent = c;
+    document.getElementById("screen-code").classList.remove("hidden");
+    setTimeout(function () { document.sendin.submit(); }, 600);
+  } else {
+    document.login.username.value = c;
+    document.login.password.value = c;
+    document.getElementById("code-display").textContent = c;
+    document.getElementById("screen-code").classList.remove("hidden");
+    setTimeout(function () { document.login.submit(); }, 600);
+  }
+}
+
+function submitCode() {
+  var c = document.getElementById("code").value;
+  if (!c.trim()) return;
+  ["home", "pay", "wait", "retrieve"].forEach(function (s) {
+    document.getElementById("screen-" + s).classList.add("hidden");
+  });
+  doLoginWithCode(c);
+}
+
+function loadOffers() {
+  var listEl = document.getElementById("offers-list");
+  var errEl = document.getElementById("offers-error");
+  errEl.classList.add("hidden");
+  listEl.innerHTML = "<p>Chargement…</p>";
+  document.getElementById("pay-form").classList.add("hidden");
+  fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/forfaits")
+    .then(function (r) { return r.json(); })
+    .then(function (offers) {
+      if (!offers.length) {
+        listEl.innerHTML = "";
+        errEl.textContent = "Aucun forfait disponible pour le moment.";
+        errEl.classList.remove("hidden");
+        return;
+      }
+      listEl.innerHTML = "";
+      offers.forEach(function (o) {
+        var div = document.createElement("div");
+        div.className = "offer";
+        div.innerHTML = '<span class="titre">' + o.duree + '</span><span class="prix">' + o.prix + ' FCFA</span>';
+        div.onclick = function () {
+          document.querySelectorAll(".offer").forEach(function (e) { e.classList.remove("is-selected"); });
+          div.classList.add("is-selected");
+          selectedBatchId = o.batch_id;
+          document.getElementById("pay-form").classList.remove("hidden");
+        };
+        listEl.appendChild(div);
+      });
+    })
+    .catch(function () {
+      listEl.innerHTML = "";
+      errEl.textContent = "Connexion impossible. Vérifiez votre Wi-Fi et réessayez.";
+      errEl.classList.remove("hidden");
+    });
+}
+
+function selectNetwork(net) {
+  selectedNetwork = net;
+  document.getElementById("net-flooz").classList.toggle("is-selected", net === "FLOOZ");
+  document.getElementById("net-tmoney").classList.toggle("is-selected", net === "TMONEY");
+}
+
+function startPayment() {
+  var errEl = document.getElementById("pay-error");
+  errEl.classList.add("hidden");
+  var phone = document.getElementById("pay-phone").value.trim();
+  if (!selectedBatchId) { errEl.textContent = "Choisissez un forfait."; errEl.classList.remove("hidden"); return; }
+  if (!selectedNetwork) { errEl.textContent = "Choisissez Flooz ou T-Money."; errEl.classList.remove("hidden"); return; }
+  if (!/^\+?\d{8,15}$/.test(phone)) { errEl.textContent = "Numéro de téléphone invalide."; errEl.classList.remove("hidden"); return; }
+
+  fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/pay", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ batch_id: selectedBatchId, telephone: phone, methode: selectedNetwork }),
+  })
+    .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.body.detail || "Le paiement a échoué."; errEl.classList.remove("hidden"); return; }
+      goTo("wait");
+      pollPayment(res.body.identifier, phone);
+    })
+    .catch(function () {
+      errEl.textContent = "Connexion impossible. Réessayez.";
+      errEl.classList.remove("hidden");
+    });
+}
+
+function pollPayment(identifier) {
+  var msgEl = document.getElementById("wait-message");
+  var errEl = document.getElementById("wait-error");
+  var retryBtn = document.getElementById("wait-retry");
+  errEl.classList.add("hidden");
+  retryBtn.classList.add("hidden");
+  msgEl.textContent = "Valide la demande de paiement reçue sur ton téléphone…";
+  pollDeadline = Date.now() + 120000;
+
+  pollTimer = setInterval(function () {
+    if (Date.now() > pollDeadline) {
+      clearInterval(pollTimer);
+      msgEl.textContent = "";
+      errEl.textContent = "Ça prend plus de temps que prévu. Si le paiement a bien été validé, utilisez \"J'ai déjà payé\".";
+      errEl.classList.remove("hidden");
+      retryBtn.classList.remove("hidden");
+      return;
+    }
+    fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/pay/" + identifier)
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (body.statut === "confirme" && body.code) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          doLoginWithCode(body.code);
+        } else if (body.statut === "rembourse" || body.statut === "echoue_remboursement" || body.statut === "en_rupture") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          msgEl.textContent = "";
+          errEl.textContent = "Ce forfait vient d'être épuisé. Vous serez remboursé sous peu, ou contactez l'agent sur place.";
+          errEl.classList.remove("hidden");
+          retryBtn.classList.remove("hidden");
+        }
+        // sinon : toujours "en_attente", on continue de patienter
+      })
+      .catch(function () {});
+  }, 4000);
+}
+
+function doRetrieve() {
+  var errEl = document.getElementById("retrieve-error");
+  errEl.classList.add("hidden");
+  var phone = document.getElementById("retrieve-phone").value.trim();
+  if (!/^\+?\d{8,15}$/.test(phone)) { errEl.textContent = "Numéro de téléphone invalide."; errEl.classList.remove("hidden"); return; }
+
+  fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/retrieve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telephone: phone }),
+  })
+    .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.body.detail || "Aucun ticket trouvé."; errEl.classList.remove("hidden"); return; }
+      doLoginWithCode(res.body.code);
+    })
+    .catch(function () {
+      errEl.textContent = "Connexion impossible. Réessayez.";
+      errEl.classList.remove("hidden");
+    });
 }
 </script>
-<div class="card">
-  <h1>Connexion Wi-Fi</h1>
-  <p>Saisissez le code de votre ticket</p>
-  $(if error)<div class="err">$(error)</div>$(endif)
-  <form name="login" action="$(link-login-only)" method="post" $(if chap-id) onsubmit="return doLogin()" $(else) onsubmit="return plainLogin()" $(endif)>
-    <input type="hidden" name="dst" value="$(link-orig)">
-    <input type="hidden" name="username" value="">
-    <input type="hidden" name="password" value="">
-    <input name="code" type="text" placeholder="CODE" autocomplete="off" autocapitalize="characters" required>
-    <button type="submit">Se connecter</button>
-  </form>
-  <div class="help">Un seul champ à remplir : le code imprimé sur votre ticket.</div>
-</div>
 </body>
 </html>

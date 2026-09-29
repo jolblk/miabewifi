@@ -99,6 +99,18 @@ class RouterOSClient:
     async def delete_hotspot_profile(self, profile_id: str):
         return await self.delete(f"ip/hotspot/user/profile/{profile_id}")
 
+    async def get_walled_garden(self):
+        return await self.get("ip/hotspot/walled-garden")
+
+    async def create_walled_garden_rule(self, dst_host: str, comment: str):
+        """Autorise (avant authentification) l'accès à un domaine précis — nécessaire pour
+        que la page HotSpot puisse joindre l'API MIABEWIFI et déclencher un paiement."""
+        return await self.put("ip/hotspot/walled-garden", {
+            "dst-host": dst_host,
+            "action": "allow",
+            "comment": comment,
+        })
+
     async def create_hotspot_user(self, name: str, password: str, profile: str, limit_uptime: str | None = None):
         payload = {"name": name, "password": password, "profile": profile}
         if limit_uptime:

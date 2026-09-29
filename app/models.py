@@ -34,6 +34,7 @@ class Router(Base):
     subscription_expires_at = Column(DateTime, nullable=True)  # nouveau champ
     setup_mode = Column(String, nullable=False, default="existing", server_default="existing")  # "new" ou "existing"
     wifi_ssid = Column(String, nullable=True)  # nom du Wi-Fi configuré (mode "new")
+    public_token = Column(String, unique=True, index=True, nullable=True)  # identifiant public, utilisé par la page hotspot (paiement en libre-service)
 
     owner = relationship("User", back_populates="routers")
     ports = relationship("PortMapping", back_populates="router")
@@ -100,10 +101,29 @@ class Sale(Base):
     id = Column(Integer, primary_key=True, index=True)
     voucher_id = Column(Integer, ForeignKey("vouchers.id"), unique=True, nullable=False)
     montant = Column(Float, nullable=False)
-    vendu_par = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # NULL = vente en libre-service (payée par le client lui-même, pas par toi/ton équipe)
+    vendu_par = Column(Integer, ForeignKey("users.id"), nullable=True)
     vendu_le = Column(DateTime, default=datetime.utcnow)
+    acheteur_telephone = Column(String, nullable=True)  # rempli uniquement pour une vente en libre-service
 
     voucher = relationship("Voucher", back_populates="sale")
+
+
+class HotspotPurchase(Base):
+    """Suit une tentative d'achat de ticket en libre-service (paiement Flooz/T-Money)
+    depuis la page de connexion du HotSpot, du clic sur "Payer" jusqu'à la confirmation."""
+    __tablename__ = "hotspot_purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
+    batch_id = Column(Integer, ForeignKey("voucher_batches.id"), nullable=False)
+    telephone = Column(String, nullable=False)
+    montant = Column(Float, nullable=False)
+    methode = Column(String, nullable=False)  # FLOOZ, TMONEY
+    statut = Column(String, default="en_attente")  # en_attente, confirme, en_rupture, echoue
+    identifier = Column(String, unique=True, nullable=False)
+    voucher_id = Column(Integer, ForeignKey("vouchers.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class RevokedToken(Base):

@@ -111,8 +111,9 @@ class SaleCreate(BaseModel):
 class SaleOut(BaseModel):
     id: int
     montant: float
-    vendu_par: int
+    vendu_par: Optional[int] = None
     vendu_le: datetime
+    acheteur_telephone: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -160,3 +161,15 @@ class HotspotProfileCreate(BaseModel):
 
 class HotspotSetupRequest(BaseModel):
     interface: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9 ._-]+$")
+
+
+# --- Paiement HotSpot en libre-service (page publique, sans authentification) ---
+
+class PublicHotspotPayRequest(BaseModel):
+    batch_id: int
+    telephone: str = Field(pattern=r"^\+?\d{8,15}$")
+    methode: Literal["FLOOZ", "TMONEY"]
+
+
+class PublicHotspotRetrieveRequest(BaseModel):
+    telephone: str = Field(pattern=r"^\+?\d{8,15}$")

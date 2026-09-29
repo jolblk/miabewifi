@@ -43,3 +43,8 @@ FRONTEND_ORIGINS = [
     for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
     if origin.strip()
 ]
+
+# Domaine public de cette instance (prod ou staging), utilisé pour :
+# - construire l'URL que la page HotSpot appelle pour le paiement en libre-service
+# - générer la règle "walled garden" qui autorise le client à joindre ce domaine avant connexion
+PUBLIC_API_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", "https://app.195.35.48.80.nip.io")
