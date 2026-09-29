@@ -10,6 +10,12 @@ export default function AppLayout() {
     const { isMobile } = useViewport();
     const { user, loading, isAdmin, logout } = useAuth();
 
+    function handleLogout() {
+        if (window.confirm('Voulez-vous vraiment vous déconnecter ?')) {
+            logout();
+        }
+    }
+
     if (loading) return null;
     if (!user) return <Navigate to="/login" replace />;
 
@@ -21,7 +27,7 @@ export default function AppLayout() {
                         <SearchBar />
                         <NotificationsBell />
                     </div>
-                    <Outlet context={{ user, isAdmin, logout }} />
+                    <Outlet context={{ user, isAdmin, logout: handleLogout }} />
                 </main>
                 <BottomNav isAdmin={isAdmin} />
             </div>
@@ -30,13 +36,13 @@ export default function AppLayout() {
 
     return (
         <div style={{ display: 'flex' }}>
-            <Sidebar isAdmin={isAdmin} onLogout={logout} />
+            <Sidebar isAdmin={isAdmin} onLogout={handleLogout} />
             <main style={{ flex: 1, padding: 24 }}>
                 <div className="app-topbar">
                     <SearchBar />
                     <NotificationsBell />
                 </div>
-                <Outlet context={{ user, isAdmin, logout }} />
+                <Outlet context={{ user, isAdmin, logout: handleLogout }} />
             </main>
         </div>
     );

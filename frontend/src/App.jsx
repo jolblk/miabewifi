@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
 import AdminRoute from './layouts/AdminRoute';
 import Login from './pages/Login';
@@ -12,7 +12,6 @@ import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import Support from './pages/Support';
 import Account from './pages/Account';
-import Hotspot from './pages/Hotspot';
 import HotspotMonitor from './pages/HotspotMonitor';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -38,7 +37,7 @@ function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/support" element={<Support />} />
             <Route path="/account" element={<Account />} />
-            <Route path="/hotspot" element={<Hotspot />} />
+            <Route path="/hotspot" element={<Navigate to="/routers" replace />} />
             <Route path="/hotspot/suivi" element={<HotspotMonitor />} />
             <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>

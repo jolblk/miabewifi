@@ -165,8 +165,7 @@ export default function Hotspot() {
 
     return (
         <div>
-            <div className="section-header">
-                <h1 className="page-title">Tickets HotSpot</h1>
+            <div className="section-header" style={{ justifyContent: 'flex-end' }}>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="btn-secondary" onClick={handleSync} disabled={!selectedRouterId || busy}>
                         <RefreshCw size={16} /> Actualiser

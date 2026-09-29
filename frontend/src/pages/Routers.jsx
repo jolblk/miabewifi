@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound, Radio, Ticket } from 'lucide-react';
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
 import { stripAccents } from '../utils/normalizeText';
+import Hotspot from './Hotspot';
 import './Routers.css';
+
+const ROUTERS_TABS = [
+    { key: 'routers', label: 'Mes routeurs', icon: Radio },
+    { key: 'tickets', label: 'Tickets hotspots', icon: Ticket },
+];
 
 function statutRouteur(r) {
     const now = new Date();
@@ -32,6 +38,7 @@ export default function Routers() {
         ? routers.filter((r) => stripAccents(r.nom).includes(normalizedQuery))
         : routers;
 
+    const [activeTab, setActiveTab] = useState('routers');
     const [showForm, setShowForm] = useState(false);
     const [nom, setNom] = useState('');
     const [busy, setBusy] = useState(false);
@@ -133,12 +140,33 @@ export default function Routers() {
     return (
         <div>
             <div className="section-header">
-                <h1 className="page-title">Mes routeurs</h1>
-                <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
-                    <Plus size={16} /> Ajouter un routeur
-                </button>
+                <h1 className="page-title">Routeurs</h1>
+                {activeTab === 'routers' && (
+                    <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
+                        <Plus size={16} /> Ajouter un routeur
+                    </button>
+                )}
             </div>
 
+            <div className="hotspot-tabs">
+                {ROUTERS_TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    return (
+                        <button
+                            key={tab.key}
+                            className={`hotspot-tab ${activeTab === tab.key ? 'hotspot-tab-active' : ''}`}
+                            onClick={() => setActiveTab(tab.key)}
+                        >
+                            <Icon size={16} /> {tab.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {activeTab === 'tickets' && <Hotspot />}
+
+            {activeTab === 'routers' && (
+            <>
             {actionError && <p className="error-text">{actionError}</p>}
 
             {showForm && (
@@ -269,6 +297,8 @@ export default function Routers() {
                     );
                 })}
             </div>
+            </>
+            )}
 
             {config && (
                 <div className="modal-overlay" onClick={() => setConfig(null)}>
