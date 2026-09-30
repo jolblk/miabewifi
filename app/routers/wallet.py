@@ -9,7 +9,8 @@ from slowapi.util import get_remote_address
 from app.database import get_db
 from app import models, schemas
 from app.dependencies import get_current_user
-from app.config import PAYGATE_AUTH_TOKEN
+from app.config import PAYGATE_AUTH_TOKEN, HOTSPOT_SALE_FEE_RATE
+from app.fees import compute_sale_split
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
@@ -129,7 +130,12 @@ async def retirer(
 async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchase) -> None:
     """Réserve un ticket disponible du forfait payé et le marque vendu à ce numéro.
     En cas de rupture de stock au moment de la confirmation (rare : quelqu'un d'autre
-    a pris le dernier ticket entre-temps), rembourse automatiquement le client."""
+    a pris le dernier ticket entre-temps), rembourse automatiquement le client.
+
+    Une fois le ticket attribué, le portefeuille du propriétaire du routeur est crédité
+    du montant de la vente moins les frais (HOTSPOT_SALE_FEE_RATE, 1 % par défaut). La vente,
+    le crédit et la ligne d'historique sont enregistrés dans une seule transaction : soit
+    tout réussit, soit rien n'est enregistré."""
     rows_updated = (
         db.query(models.HotspotPurchase)
         .filter(models.HotspotPurchase.id == purchase.id, models.HotspotPurchase.statut == "en_attente")
@@ -171,7 +177,36 @@ async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchas
 
     voucher.statut = "USED"
     voucher.used_at = datetime.utcnow()
-    db.add(models.Sale(voucher_id=voucher.id, montant=purchase.montant, vendu_par=None, acheteur_telephone=purchase.telephone))
+
+    frais, net = compute_sale_split(purchase.montant, HOTSPOT_SALE_FEE_RATE)
+    db.add(models.Sale(
+        voucher_id=voucher.id,
+        montant=purchase.montant,
+        frais=frais,
+        vendu_par=None,
+        acheteur_telephone=purchase.telephone,
+    ))
+
+    # Crédite le propriétaire du routeur (ligne verrouillée : pas de crédit perdu si deux
+    # ventes sont confirmées en même temps, ni de conflit avec un retrait en cours).
+    owner_id = db.query(models.Router.owner_id).filter(models.Router.id == purchase.router_id).scalar()
+    owner = (
+        db.query(models.User).filter(models.User.id == owner_id).with_for_update().first()
+        if owner_id is not None else None
+    )
+    if owner is not None:
+        owner.solde = (owner.solde or 0.0) + net
+        db.add(models.Transaction(
+            user_id=owner.id,
+            montant=net,
+            methode=purchase.methode,
+            statut="confirme",
+            type="vente",
+            identifier=f"{purchase.identifier}-credit",
+        ))
+    else:
+        logger.error("Propriétaire introuvable pour l'achat %s : aucun crédit effectué", purchase.identifier)
+
     purchase.statut = "confirme"
     purchase.voucher_id = voucher.id
     db.commit()

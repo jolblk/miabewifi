@@ -5,7 +5,7 @@ import { stripAccents } from '../../utils/normalizeText';
 import './Admin.css';
 
 const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success' };
-const typeLabel = { recharge: 'Recharge', debit: 'Pack activé', retrait: 'Retrait' };
+const typeLabel = { recharge: 'Recharge', vente: 'Vente de ticket', debit: 'Pack activé', retrait: 'Retrait' };
 
 export default function AdminTransactions() {
     const [transactions, setTransactions] = useState([]);

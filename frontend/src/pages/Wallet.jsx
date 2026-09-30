@@ -5,7 +5,8 @@ import './Wallet.css';
 
 const statutLabel = { en_attente: 'En attente', confirme: 'Confirmé' };
 const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success' };
-const typeLabel = { recharge: 'Recharge', debit: 'Pack activé', retrait: 'Retrait' };
+const typeLabel = { recharge: 'Recharge', vente: 'Vente de ticket', debit: 'Pack activé', retrait: 'Retrait' };
+const creditTypes = ['recharge', 'vente'];
 
 export default function Wallet() {
     const { solde, transactions, loading, recharger, retirer } = useWalletData();
@@ -128,7 +129,7 @@ export default function Wallet() {
                 )}
                 <div className="tx-list">
                     {transactions.map((t) => {
-                        const isCredit = t.type === 'recharge';
+                        const isCredit = creditTypes.includes(t.type);
                         return (
                             <div key={t.id} className="tx-row">
                                 <div className="tx-main">

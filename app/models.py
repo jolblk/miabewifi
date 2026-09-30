@@ -105,6 +105,7 @@ class Sale(Base):
     vendu_par = Column(Integer, ForeignKey("users.id"), nullable=True)
     vendu_le = Column(DateTime, default=datetime.utcnow)
     acheteur_telephone = Column(String, nullable=True)  # rempli uniquement pour une vente en libre-service
+    frais = Column(Float, nullable=True)  # frais prélevés (FCFA) sur une vente en libre-service ; NULL = aucun
 
     voucher = relationship("Voucher", back_populates="sale")
 

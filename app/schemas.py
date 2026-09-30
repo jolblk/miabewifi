@@ -114,6 +114,7 @@ class SaleOut(BaseModel):
     vendu_par: Optional[int] = None
     vendu_le: datetime
     acheteur_telephone: Optional[str] = None
+    frais: Optional[float] = None
 
     class Config:
         from_attributes = True

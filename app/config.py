@@ -48,3 +48,7 @@ FRONTEND_ORIGINS = [
 # - construire l'URL que la page HotSpot appelle pour le paiement en libre-service
 # - générer la règle "walled garden" qui autorise le client à joindre ce domaine avant connexion
 PUBLIC_API_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", "https://app.195.35.48.80.nip.io")
+
+# Frais prélevés sur chaque vente de ticket en libre-service (0.01 = 1 %).
+# Couvre les frais PayGate sur les retraits par API. 0 = aucun frais.
+HOTSPOT_SALE_FEE_RATE = os.getenv("HOTSPOT_SALE_FEE_RATE", "0.01")
