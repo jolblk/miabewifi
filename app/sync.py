@@ -19,6 +19,13 @@ from app.routeros_client import RouterOSClient
 logger = logging.getLogger("miabewifi.sync")
 
 
+def _to_int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def decide_voucher_update(
     *,
     now: datetime,
@@ -27,6 +34,7 @@ def decide_voucher_update(
     validite_jours: int | None,
     limit_seconds: int | None,
     ros_user: dict | None,
+    limit_bytes: int | None = None,
 ) -> dict:
     """Décide ce qu'il faut changer pour un ticket. Fonction pure (sans base ni réseau).
 
@@ -55,8 +63,11 @@ def decide_voucher_update(
 
     time_exhausted = bool(limit_seconds) and uptime >= limit_seconds
     calendar_expired = expires_at is not None and now >= expires_at
+    # Quota de données : le routeur bloque lui-même le ticket une fois atteint, on le marque expiré.
+    used_bytes = _to_int(ros_user.get("bytes-in")) + _to_int(ros_user.get("bytes-out"))
+    quota_exhausted = bool(limit_bytes) and used_bytes >= limit_bytes
 
-    if time_exhausted or calendar_expired:
+    if time_exhausted or calendar_expired or quota_exhausted:
         changes["expire"] = True
         changes["remove_from_router"] = True
 
@@ -89,6 +100,7 @@ async def sync_router(db, db_router: models.Router, client: RouterOSClient) -> d
             validite_jours=batch.validite_jours,
             limit_seconds=parse_ros_duration(batch.limit_uptime),
             ros_user=ros_user,
+            limit_bytes=batch.quota_mo * 1024 * 1024 if batch.quota_mo else None,
         )
         if "first_login_at" in changes:
             voucher.first_login_at = changes["first_login_at"]

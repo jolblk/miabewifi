@@ -1,7 +1,9 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from datetime import datetime
 from typing import Literal, Optional
 from urllib.parse import quote_plus
+
+from app import branding
 
 
 class UserCreate(BaseModel):
@@ -102,6 +104,8 @@ class VoucherBatchCreate(BaseModel):
     quantite: int = Field(gt=0, le=500)
     # Nombre de jours de validité APRÈS la 1re connexion. Vide = pas de limite calendaire.
     validite_jours: Optional[int] = Field(default=None, ge=1, le=365)
+    # Quota de données par ticket, en Mo (ex: 1024 = 1 Go). Vide = illimité.
+    quota_mo: Optional[int] = Field(default=None, ge=1, le=1_000_000)
 
 
 class SaleCreate(BaseModel):
@@ -141,6 +145,8 @@ class VoucherBatchOut(BaseModel):
     created_at: datetime
     validite_jours: Optional[int] = None
     limit_uptime: Optional[str] = None
+    quota_mo: Optional[int] = None
+    online_sale: bool = True
     vouchers: list[VoucherOut] = []
 
     class Config:
@@ -158,6 +164,62 @@ class HotspotProfileCreate(BaseModel):
     duree_unite: Literal["h", "d"]
     partage: int = Field(default=1, ge=1, le=20)
     rate_limit: Optional[str] = Field(default=None, pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
+
+
+class HotspotProfileUpdate(BaseModel):
+    """Modification d'un forfait existant : seuls les champs envoyés changent.
+    Le nom ne se modifie pas (les tickets déjà créés y restent rattachés)."""
+    duree_valeur: Optional[int] = Field(default=None, gt=0, le=999)
+    duree_unite: Optional[Literal["h", "d"]] = None
+    partage: Optional[int] = Field(default=None, ge=1, le=20)
+    rate_limit: Optional[str] = Field(default=None, pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
+
+    @model_validator(mode="after")
+    def _duration_needs_unit(self):
+        if (self.duree_valeur is None) != (self.duree_unite is None):
+            raise ValueError("La durée et son unité (heures ou jours) vont ensemble.")
+        return self
+
+
+class BatchOnlineSaleUpdate(BaseModel):
+    online_sale: bool
+
+
+class HotspotSettingsUpdate(BaseModel):
+    """Réglages du HotSpot. Seuls les champs envoyés sont modifiés ;
+    une chaîne vide (nom, couleur, préfixe) remet la valeur par défaut."""
+    online_sales_enabled: Optional[bool] = None
+    brand_name: Optional[str] = None
+    brand_color: Optional[str] = None
+    code_prefix: Optional[str] = None
+    code_length: Optional[int] = None
+    code_digits_only: Optional[bool] = None
+
+    @field_validator("brand_name")
+    @classmethod
+    def _check_brand_name(cls, v):
+        return branding.clean_brand_name(v)
+
+    @field_validator("brand_color")
+    @classmethod
+    def _check_brand_color(cls, v):
+        return branding.clean_brand_color(v)
+
+    @field_validator("code_prefix")
+    @classmethod
+    def _check_code_prefix(cls, v):
+        return branding.clean_code_prefix(v)
+
+
+class HotspotSettingsOut(BaseModel):
+    online_sales_enabled: bool
+    brand_name: Optional[str] = None
+    brand_color: Optional[str] = None
+    has_logo: bool = False
+    logo: Optional[str] = None  # data URI (aperçu)
+    code_prefix: Optional[str] = None
+    code_length: int = 8
+    code_digits_only: bool = False
 
 
 class HotspotSetupRequest(BaseModel):

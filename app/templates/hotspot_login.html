@@ -3,32 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Connexion Wi-Fi</title>
+<title>__BRAND_NAME__</title>
 <style>
+  :root{--brand:__BRAND_COLOR__}
+  .logo{display:block;max-width:96px;max-height:96px;margin:0 auto 12px}
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f5fb;font-family:Arial,Helvetica,sans-serif;color:#1e1b2e}
   .card{background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);padding:28px 22px;width:92%;max-width:360px;text-align:center}
   h1{font-size:22px;margin:0 0 6px}
   p{margin:0 0 18px;color:#6b6478;font-size:14px}
   input[type=text],input[type=tel]{width:100%;box-sizing:border-box;padding:14px;font-size:20px;letter-spacing:1px;text-align:center;border:2px solid #e4e1ec;border-radius:10px;margin-bottom:10px}
-  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:#7c3aed}
+  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:var(--brand)}
   #code{letter-spacing:3px;text-transform:uppercase}
-  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:#7c3aed;border:0;border-radius:10px;cursor:pointer}
-  button.secondary{background:#fff;color:#7c3aed;border:2px solid #ece9f5}
+  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:var(--brand);border:0;border-radius:10px;cursor:pointer}
+  button.secondary{background:#fff;color:var(--brand);border:2px solid #ece9f5}
   button:disabled{opacity:.6;cursor:default}
   .err{color:#dc2626;font-size:14px;margin:0 0 12px}
   .ok{color:#15803d;font-size:14px;margin:0 0 12px}
   .help{margin-top:16px;font-size:12px}
-  .link-btn{background:none;border:0;color:#7c3aed;font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
+  .link-btn{background:none;border:0;color:var(--brand);font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
   .offer{border:2px solid #e4e1ec;border-radius:10px;padding:12px;margin-bottom:10px;text-align:left;cursor:pointer}
-  .offer.is-selected{border-color:#7c3aed;background:#f7f5fb}
+  .offer.is-selected{border-color:var(--brand);background:#f7f5fb}
   .offer .titre{font-weight:bold}
-  .offer .prix{color:#7c3aed;font-weight:bold;float:right}
+  .offer .prix{color:var(--brand);font-weight:bold;float:right}
   .network-row{display:flex;gap:8px;margin-bottom:10px}
   .network-row button{margin-top:0}
-  .network-row button.is-selected{background:#7c3aed;color:#fff}
-  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:#7c3aed;border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
+  .network-row button.is-selected{background:var(--brand);color:#fff}
+  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:var(--brand);border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:#7c3aed;margin:6px 0 16px}
+  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:var(--brand);margin:6px 0 16px}
   .hidden{display:none}
 </style>
 </head>
@@ -50,7 +52,8 @@ $(endif)
 <div class="card">
 
   <div id="screen-home">
-    <h1>Connexion Wi-Fi</h1>
+    __BRAND_LOGO_HTML__
+    <h1>__BRAND_NAME__</h1>
     <p>Saisissez le code de votre ticket, ou payez directement ici</p>
     $(if error)<div class="err">$(error)</div>$(endif)
     <input id="code" type="text" placeholder="CODE" autocomplete="off" autocapitalize="characters">
@@ -166,7 +169,7 @@ function loadOffers() {
       offers.forEach(function (o) {
         var div = document.createElement("div");
         div.className = "offer";
-        div.innerHTML = '<span class="titre">' + o.duree + '</span><span class="prix">' + o.prix + ' FCFA</span>';
+        div.innerHTML = '<span class="titre">' + o.duree + (o.quota ? ' · ' + o.quota : '') + '</span><span class="prix">' + o.prix + ' FCFA</span>';
         div.onclick = function () {
           document.querySelectorAll(".offer").forEach(function (e) { e.classList.remove("is-selected"); });
           div.classList.add("is-selected");

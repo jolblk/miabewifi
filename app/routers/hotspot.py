@@ -4,13 +4,13 @@ import logging
 import secrets
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app import models, schemas
+from app import branding, models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
@@ -127,6 +127,42 @@ async def create_hotspot_profile(
     return payload
 
 
+@router.patch("/{router_id}/profiles/{profile_id}")
+async def update_hotspot_profile(
+    router_id: int,
+    profile_id: str,
+    data: schemas.HotspotProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Modifie la durée, les appareils simultanés et/ou la vitesse d'un forfait.
+    Le nom ne change pas. Les tickets DÉJÀ générés gardent la durée qu'ils avaient à leur
+    création ; seuls les prochains lots utiliseront la nouvelle durée."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+
+    payload: dict = {}
+    if data.duree_valeur is not None:
+        payload["session-timeout"] = f"{data.duree_valeur}{data.duree_unite}"
+    if data.partage is not None:
+        payload["shared-users"] = str(data.partage)
+    if data.rate_limit is not None:
+        payload["rate-limit"] = data.rate_limit
+    if not payload:
+        raise HTTPException(status_code=400, detail="Aucune modification demandée.")
+
+    try:
+        async with _client_for(db_router) as client:
+            existing = await client.get_hotspot_profiles()
+            if not any(p.get(".id") == profile_id for p in existing):
+                raise HTTPException(status_code=404, detail="Forfait introuvable sur ce routeur.")
+            await client.update_hotspot_profile(profile_id, payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de modifier ce forfait : {e}")
+    return {"message": "Forfait modifié.", **payload}
+
+
 @router.delete("/{router_id}/profiles/{profile_id}")
 async def delete_hotspot_profile(
     router_id: int,
@@ -159,15 +195,19 @@ async def list_active_sessions(
         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
 
 
-def _generate_voucher_code() -> str:
-    return secrets.token_hex(4).upper()  # ex: "A1B2C3D4"
+def _generate_unique_codes(db: Session, quantite: int, db_router: models.Router | None = None) -> list[str]:
+    """Génère `quantite` codes qui n'existent ni dans le lot ni déjà en base,
+    selon le format choisi par le client (préfixe, longueur, chiffres seulement)."""
+    prefix = getattr(db_router, "code_prefix", None)
+    length = getattr(db_router, "code_length", None) or branding.CODE_LENGTH_DEFAULT
+    digits_only = bool(getattr(db_router, "code_digits_only", False))
 
+    def _one() -> str:
+        return branding.generate_code(prefix, length, digits_only)
 
-def _generate_unique_codes(db: Session, quantite: int) -> list[str]:
-    """Génère `quantite` codes qui n'existent ni dans le lot ni déjà en base."""
     codes: set[str] = set()
     while len(codes) < quantite:
-        candidates = {_generate_voucher_code() for _ in range(quantite - len(codes))} - codes
+        candidates = {_one() for _ in range(quantite - len(codes))} - codes
         taken = {
             c for (c,) in db.query(models.Voucher.code).filter(models.Voucher.code.in_(candidates)).all()
         }
@@ -281,13 +321,15 @@ async def create_voucher_batch(
         if limit_uptime in (None, "", "0s", "00:00:00"):
             limit_uptime = None
 
-        codes = _generate_unique_codes(db, data.quantite)
+        codes = _generate_unique_codes(db, data.quantite, db_router)
+        limit_bytes = data.quota_mo * 1024 * 1024 if data.quota_mo else None
         sem = asyncio.Semaphore(ROUTER_CONCURRENCY)
 
         async def _create(code: str):
             async with sem:
                 await client.create_hotspot_user(
-                    name=code, password=code, profile=data.profile_name, limit_uptime=limit_uptime,
+                    name=code, password=code, profile=data.profile_name,
+                    limit_uptime=limit_uptime, limit_bytes_total=limit_bytes,
                 )
 
         results = await asyncio.gather(*[_create(c) for c in codes], return_exceptions=True)
@@ -313,6 +355,7 @@ async def create_voucher_batch(
                 quantite=data.quantite,
                 validite_jours=data.validite_jours,
                 limit_uptime=limit_uptime,
+                quota_mo=data.quota_mo,
             )
             db.add(batch)
             db.flush()
@@ -370,6 +413,112 @@ async def set_rate_limit(
     return {"rate_limit": data.rate_limit, "forfaits": [p["name"] for p in targets]}
 
 
+def _settings_out(db_router: models.Router) -> schemas.HotspotSettingsOut:
+    return schemas.HotspotSettingsOut(
+        online_sales_enabled=bool(db_router.online_sales_enabled),
+        brand_name=db_router.brand_name,
+        brand_color=db_router.brand_color,
+        has_logo=bool(db_router.brand_logo),
+        logo=db_router.brand_logo,
+        code_prefix=db_router.code_prefix,
+        code_length=db_router.code_length or branding.CODE_LENGTH_DEFAULT,
+        code_digits_only=bool(db_router.code_digits_only),
+    )
+
+
+@router.get("/{router_id}/settings", response_model=schemas.HotspotSettingsOut)
+def get_hotspot_settings(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return _settings_out(_get_authorized_router(router_id, db, current_user))
+
+
+@router.put("/{router_id}/settings", response_model=schemas.HotspotSettingsOut)
+def update_hotspot_settings(
+    router_id: int,
+    data: schemas.HotspotSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Met à jour les réglages envoyés (les autres ne bougent pas). Une chaîne vide remet
+    la valeur par défaut. La page de connexion du routeur n'est PAS modifiée automatiquement :
+    le client la réinstalle quand il le décide (bouton « Appliquer sur la page de connexion »)."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    sent = data.model_fields_set
+
+    if "brand_name" in sent:
+        db_router.brand_name = data.brand_name
+    if "brand_color" in sent:
+        db_router.brand_color = data.brand_color
+    if "code_prefix" in sent:
+        db_router.code_prefix = data.code_prefix
+    if data.online_sales_enabled is not None:
+        db_router.online_sales_enabled = data.online_sales_enabled
+
+    length = data.code_length if data.code_length is not None else (db_router.code_length or branding.CODE_LENGTH_DEFAULT)
+    digits_only = data.code_digits_only if data.code_digits_only is not None else bool(db_router.code_digits_only)
+    try:
+        branding.check_code_format(length, digits_only)
+    except branding.BrandingError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    db_router.code_length = length
+    db_router.code_digits_only = digits_only
+
+    db.commit()
+    db.refresh(db_router)
+    return _settings_out(db_router)
+
+
+@router.post("/{router_id}/settings/logo", response_model=schemas.HotspotSettingsOut)
+async def upload_hotspot_logo(
+    router_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Envoie le logo (PNG ou JPEG). L'image est vérifiée, ré-encodée et réduite."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    raw = await file.read(branding.LOGO_MAX_UPLOAD_BYTES + 1)
+    try:
+        db_router.brand_logo = branding.process_logo(raw)
+    except branding.BrandingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    db.commit()
+    db.refresh(db_router)
+    return _settings_out(db_router)
+
+
+@router.delete("/{router_id}/settings/logo", response_model=schemas.HotspotSettingsOut)
+def delete_hotspot_logo(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db_router = _get_authorized_router(router_id, db, current_user)
+    db_router.brand_logo = None
+    db.commit()
+    db.refresh(db_router)
+    return _settings_out(db_router)
+
+
+@router.patch("/vouchers/batch/{batch_id}/online-sale")
+def set_batch_online_sale(
+    batch_id: int,
+    data: schemas.BatchOnlineSaleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Choisit si ce lot est proposé (ou non) sur la page de paiement en ligne.
+    Les tickets restent utilisables et vendables à la main dans tous les cas."""
+    batch = _get_authorized_batch(batch_id, db, current_user)
+    batch.online_sale = data.online_sale
+    db.commit()
+    return {"batch_id": batch.id, "online_sale": batch.online_sale}
+
+
 @router.post("/{router_id}/login-page")
 async def install_login_page(
     router_id: int,
@@ -381,7 +530,15 @@ async def install_login_page(
     db_router = _get_authorized_router(router_id, db, current_user)
     try:
         async with _client_for(db_router) as client:
-            await client.write_file(LOGIN_PAGE_ROUTER_FILE, render_login_page(db_router.public_token))
+            await client.write_file(
+                LOGIN_PAGE_ROUTER_FILE,
+                render_login_page(
+                    db_router.public_token,
+                    brand_name=db_router.brand_name,
+                    brand_color=db_router.brand_color,
+                    brand_logo=db_router.brand_logo,
+                ),
+            )
     except Exception as e:
         raise HTTPException(
             status_code=502,
@@ -472,7 +629,12 @@ def download_voucher_batch_pdf(
     batch_router = db.query(models.Router).filter(models.Router.id == batch.router_id).first()
     wifi_ssid = batch_router.wifi_ssid if batch_router else None
 
-    pdf_bytes = generate_vouchers_pdf(batch, batch.vouchers, wifi_ssid=wifi_ssid)
+    pdf_bytes = generate_vouchers_pdf(
+        batch, batch.vouchers, wifi_ssid=wifi_ssid,
+        brand_name=batch_router.brand_name if batch_router else None,
+        brand_color=batch_router.brand_color if batch_router else None,
+        brand_logo=batch_router.brand_logo if batch_router else None,
+    )
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

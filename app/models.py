@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, true, false
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -35,6 +35,14 @@ class Router(Base):
     setup_mode = Column(String, nullable=False, default="existing", server_default="existing")  # "new" ou "existing"
     wifi_ssid = Column(String, nullable=True)  # nom du Wi-Fi configuré (mode "new")
     public_token = Column(String, unique=True, index=True, nullable=True)  # identifiant public, utilisé par la page hotspot (paiement en libre-service)
+    # Réglages du HotSpot choisis par le client
+    online_sales_enabled = Column(Boolean, nullable=False, default=True, server_default=true())  # vente en libre-service active
+    brand_name = Column(String, nullable=True)   # nom affiché sur la page de connexion et les tickets PDF
+    brand_color = Column(String, nullable=True)  # couleur principale (#RRGGBB)
+    brand_logo = Column(Text, nullable=True)     # logo réduit, en data URI PNG
+    code_prefix = Column(String, nullable=True)  # préfixe des codes de tickets (ex: "WIFI")
+    code_length = Column(Integer, nullable=False, default=8, server_default="8")  # nombre de caractères après le préfixe
+    code_digits_only = Column(Boolean, nullable=False, default=False, server_default=false())  # codes 100 % numériques
 
     owner = relationship("User", back_populates="routers")
     ports = relationship("PortMapping", back_populates="router")
@@ -75,6 +83,8 @@ class VoucherBatch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     validite_jours = Column(Integer, nullable=True)  # validité calendaire, comptée dès la 1re connexion
     limit_uptime = Column(String, nullable=True)     # durée de connexion cumulée (ex: "1d"), copiée du forfait
+    quota_mo = Column(Integer, nullable=True)        # quota de données par ticket en Mo ; NULL = illimité
+    online_sale = Column(Boolean, nullable=False, default=True, server_default=true())  # proposé sur la page de paiement en ligne
 
     vouchers = relationship("Voucher", back_populates="batch")
 

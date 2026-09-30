@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X } from 'lucide-react';
+import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X, Pencil } from 'lucide-react';
 import { useHotspotData } from '../hooks/useHotspotData';
 import './Hotspot.css';
 
@@ -21,6 +21,30 @@ function ticketBadges(v) {
     return badges;
 }
 
+// Message d'erreur lisible : le serveur renvoie soit un texte, soit (erreur de saisie) une liste.
+function errorMessage(err, fallback) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+        return String(detail[0].msg || fallback).replace(/^Value error, /, '');
+    }
+    return fallback;
+}
+
+function formatQuota(quotaMo) {
+    if (!quotaMo) return '';
+    if (quotaMo < 1024) return `${quotaMo} Mo`;
+    return `${(quotaMo / 1024).toFixed(1).replace(/\.0$/, '').replace('.', ',')} Go`;
+}
+
+// "24h" -> { valeur: '24', unite: 'h' } ; un format plus exotique (ex: "1d2h") est laissé vide.
+function parseTimeout(value) {
+    const m = /^(\d+)([hd])$/.exec(String(value || ''));
+    return m ? { valeur: m[1], unite: m[2] } : { valeur: '', unite: 'h' };
+}
+
+const DEFAULT_BRAND_COLOR = '#7c3aed';
+
 function batchSummary(batch) {
     let disponibles = 0;
     let vendus = 0;
@@ -36,9 +60,10 @@ function batchSummary(batch) {
 export default function Hotspot() {
     const {
         routers, selectedRouterId, setSelectedRouterId,
-        batches, loading, error, profiles, currentRateLimit,
+        batches, loading, error, profiles, currentRateLimit, settings,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
         deleteVoucher, deleteBatch, createProfile, deleteProfile,
+        updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
     } = useHotspotData();
 
     const [showForm, setShowForm] = useState(false);
@@ -56,10 +81,42 @@ export default function Hotspot() {
     const [newProfileDureeValeur, setNewProfileDureeValeur] = useState('24');
     const [newProfileDureeUnite, setNewProfileDureeUnite] = useState('h');
     const [newProfilePartage, setNewProfilePartage] = useState('1');
+    const [newProfileRate, setNewProfileRate] = useState('');
+
+    const [quotaValeur, setQuotaValeur] = useState('');
+    const [quotaUnite, setQuotaUnite] = useState('go');
+
+    const [editingId, setEditingId] = useState(null);
+    const [editDuree, setEditDuree] = useState('');
+    const [editUnite, setEditUnite] = useState('h');
+    const [editPartage, setEditPartage] = useState('1');
+    const [editRate, setEditRate] = useState('');
+
+    const [sOnline, setSOnline] = useState(true);
+    const [sBrandName, setSBrandName] = useState('');
+    const [sBrandColor, setSBrandColor] = useState('');
+    const [sPrefix, setSPrefix] = useState('');
+    const [sLength, setSLength] = useState('8');
+    const [sDigits, setSDigits] = useState(false);
 
     useEffect(() => {
         setRateLimit(currentRateLimit);
     }, [currentRateLimit]);
+
+    // Recopie les réglages du serveur dans le formulaire dès qu'ils changent
+    // (chargement, changement de routeur, enregistrement).
+    const [syncedSettings, setSyncedSettings] = useState(null);
+    if (settings !== syncedSettings) {
+        setSyncedSettings(settings);
+        if (settings) {
+            setSOnline(settings.online_sales_enabled);
+            setSBrandName(settings.brand_name || '');
+            setSBrandColor(settings.brand_color || '');
+            setSPrefix(settings.code_prefix || '');
+            setSLength(String(settings.code_length || 8));
+            setSDigits(Boolean(settings.code_digits_only));
+        }
+    }
 
     async function handleGenerate(e) {
         e.preventDefault();
@@ -68,13 +125,20 @@ export default function Hotspot() {
         setActionError('');
         setActionInfo('');
         try {
-            await generateBatch(profileName.trim(), Number(prixUnitaire), Number(quantite), validiteJours ? Number(validiteJours) : null);
+            const quotaMo = quotaValeur ? Math.round(Number(quotaValeur) * (quotaUnite === 'go' ? 1024 : 1)) : null;
+            if (quotaValeur && !(quotaMo >= 1)) {
+                setActionError('Quota de données invalide.');
+                setBusy(false);
+                return;
+            }
+            await generateBatch(profileName.trim(), Number(prixUnitaire), Number(quantite), validiteJours ? Number(validiteJours) : null, quotaMo);
             setProfileName('');
             setPrixUnitaire('');
             setQuantite('');
+            setQuotaValeur('');
             setShowForm(false);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la génération des tickets.");
+            setActionError(errorMessage(err, "Erreur lors de la génération des tickets."));
         } finally {
             setBusy(false);
         }
@@ -166,15 +230,16 @@ export default function Hotspot() {
                 Number(newProfileDureeValeur),
                 newProfileDureeUnite,
                 Number(newProfilePartage) || 1,
-                rateLimit.trim() || null,
+                newProfileRate.trim() || null,
             );
             setProfileName(created.name);
             setNewProfileName('');
             setNewProfileDureeValeur('24');
             setNewProfilePartage('1');
+            setNewProfileRate('');
             setShowNewProfile(false);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la création du forfait.");
+            setActionError(errorMessage(err, "Erreur lors de la création du forfait."));
         } finally {
             setBusy(false);
         }
@@ -189,6 +254,101 @@ export default function Hotspot() {
             if (profileName === profile.name) setProfileName('');
         } catch (err) {
             setActionError(err.response?.data?.detail || "Erreur lors de la suppression du forfait.");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function startEditProfile(profile) {
+        const t = parseTimeout(profile['session-timeout']);
+        setEditingId(profile['.id']);
+        setEditDuree(t.valeur);
+        setEditUnite(t.unite);
+        setEditPartage(String(profile['shared-users'] || '1'));
+        setEditRate(profile['rate-limit'] || '');
+        setActionError('');
+        setActionInfo('');
+    }
+
+    async function handleSaveProfile() {
+        const changes = {};
+        if (editDuree) {
+            changes.duree_valeur = Number(editDuree);
+            changes.duree_unite = editUnite;
+        }
+        if (editPartage) changes.partage = Number(editPartage);
+        if (editRate.trim()) changes.rate_limit = editRate.trim();
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            await updateProfile(editingId, changes);
+            setEditingId(null);
+            setActionInfo("Forfait modifié. Les tickets déjà générés gardent leur durée d'origine ; les prochains lots utiliseront la nouvelle.");
+        } catch (err) {
+            setActionError(errorMessage(err, "Erreur lors de la modification du forfait."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleSaveSettings() {
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            await saveSettings({
+                online_sales_enabled: sOnline,
+                brand_name: sBrandName,
+                brand_color: sBrandColor,
+                code_prefix: sPrefix,
+                code_length: Number(sLength) || 8,
+                code_digits_only: sDigits,
+            });
+            setActionInfo("Réglages enregistrés. Pour changer la page de connexion du Wi-Fi, cliquez sur « Appliquer sur la page de connexion ».");
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible d'enregistrer les réglages."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleLogoChange(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            await uploadLogo(file);
+            setActionInfo("Logo enregistré. Cliquez sur « Appliquer sur la page de connexion » pour l'afficher sur le Wi-Fi.");
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible d'envoyer ce logo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleRemoveLogo() {
+        setBusy(true);
+        setActionError('');
+        try {
+            await removeLogo();
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible de retirer le logo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleToggleBatchOnline(batch) {
+        setBusy(true);
+        setActionError('');
+        try {
+            await setBatchOnlineSale(batch.id, !batch.online_sale);
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible de modifier ce lot."));
         } finally {
             setBusy(false);
         }
@@ -252,7 +412,7 @@ export default function Hotspot() {
                 <form className="section-card" onSubmit={handleRateLimit}>
                     <h2>Réglages du HotSpot</h2>
                     <label className="field-label" htmlFor="rate-limit">
-                        Vitesse maximale par client (envoi/téléchargement)
+                        Appliquer la même vitesse à tous les forfaits (envoi/téléchargement)
                     </label>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <input
@@ -269,7 +429,7 @@ export default function Hotspot() {
                     </div>
                     <p className="empty-hint">
                         Évite qu'un seul client sature votre connexion. Exemples : 2M/2M, 1M/3M, 512k/1M.
-                        S'applique à tous les forfaits « Ticket-… ».
+                        Écrase la vitesse de tous les forfaits « Ticket-… ». Pour régler un seul forfait, utilisez le crayon dans la liste ci-dessous.
                     </p>
                     <button type="button" className="btn-secondary" disabled={busy} onClick={handleInstallLoginPage}>
                         Installer la page de connexion simplifiée
@@ -285,7 +445,20 @@ export default function Hotspot() {
                             <div className="voucher-grid">
                                 {profiles.map((p) => (
                                     <div key={p['.id']} className="voucher-pill">
-                                        <span>{p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}</span>
+                                        <span>
+                                            {p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}
+                                            {p['rate-limit'] ? ` · ${p['rate-limit']}` : ''}
+                                            {p['shared-users'] && p['shared-users'] !== '1' ? ` · ${p['shared-users']} appareils` : ''}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="icon-btn"
+                                            disabled={busy}
+                                            aria-label={`Modifier ${p.name}`}
+                                            onClick={() => startEditProfile(p)}
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
                                         <button
                                             type="button"
                                             className="icon-btn"
@@ -298,9 +471,147 @@ export default function Hotspot() {
                                     </div>
                                 ))}
                             </div>
+
+                            {editingId && (
+                                <div className="section-card" style={{ marginTop: '0.75rem' }}>
+                                    <h2>Modifier le forfait {profiles.find((p) => p['.id'] === editingId)?.name}</h2>
+                                    <label className="field-label" htmlFor="edit-duree">Durée de connexion cumulée</label>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <input
+                                            id="edit-duree"
+                                            type="number"
+                                            min="1"
+                                            max="999"
+                                            className="text-input"
+                                            style={{ maxWidth: 100 }}
+                                            value={editDuree}
+                                            onChange={(e) => setEditDuree(e.target.value)}
+                                        />
+                                        <select className="text-input" style={{ maxWidth: 140 }} value={editUnite} onChange={(e) => setEditUnite(e.target.value)}>
+                                            <option value="h">Heures</option>
+                                            <option value="d">Jours</option>
+                                        </select>
+                                    </div>
+                                    <label className="field-label" htmlFor="edit-partage">Appareils simultanés autorisés</label>
+                                    <input
+                                        id="edit-partage"
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        className="text-input"
+                                        style={{ maxWidth: 100 }}
+                                        value={editPartage}
+                                        onChange={(e) => setEditPartage(e.target.value)}
+                                    />
+                                    <label className="field-label" htmlFor="edit-rate">Vitesse maximale par client</label>
+                                    <input
+                                        id="edit-rate"
+                                        className="text-input"
+                                        style={{ maxWidth: 160 }}
+                                        value={editRate}
+                                        onChange={(e) => setEditRate(e.target.value)}
+                                        placeholder="2M/2M"
+                                    />
+                                    <p className="empty-hint">
+                                        Les tickets déjà générés gardent leur durée d'origine ; seuls les prochains lots utilisent la nouvelle durée.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <button type="button" className="btn-primary" disabled={busy} onClick={handleSaveProfile}>Enregistrer</button>
+                                        <button type="button" className="btn-secondary" disabled={busy} onClick={() => setEditingId(null)}>Annuler</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </form>
+            )}
+
+            {selectedRouterId && settings && (
+                <div className="section-card">
+                    <h2>Vente en ligne et personnalisation</h2>
+
+                    <label className="hotspot-check">
+                        <input type="checkbox" checked={sOnline} onChange={(e) => setSOnline(e.target.checked)} />
+                        Vente en ligne activée (paiement Flooz / T-Money sur la page de connexion)
+                    </label>
+                    <p className="empty-hint">
+                        Désactivée, plus personne ne peut payer en ligne ; vos tickets restent vendables à la main.
+                        Vous choisissez aussi, lot par lot, ceux proposés en ligne (case « En ligne » sur chaque lot).
+                    </p>
+
+                    <label className="field-label" htmlFor="brand-name">Nom affiché sur la page de connexion et les tickets</label>
+                    <input
+                        id="brand-name"
+                        className="text-input"
+                        maxLength={40}
+                        placeholder="ex : Cyber Chez Ama"
+                        value={sBrandName}
+                        onChange={(e) => setSBrandName(e.target.value)}
+                    />
+
+                    <label className="field-label" htmlFor="brand-color">Couleur principale</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                            id="brand-color"
+                            type="color"
+                            value={sBrandColor || DEFAULT_BRAND_COLOR}
+                            onChange={(e) => setSBrandColor(e.target.value)}
+                        />
+                        <span className="empty-hint">{sBrandColor || 'Couleur MIABEWIFI par défaut'}</span>
+                        {sBrandColor && (
+                            <button type="button" className="btn-secondary" onClick={() => setSBrandColor('')}>Couleur par défaut</button>
+                        )}
+                    </div>
+
+                    <label className="field-label" htmlFor="brand-logo">Logo (PNG ou JPEG, 2 Mo maximum)</label>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {settings.logo && <img className="hotspot-logo-preview" src={settings.logo} alt="Logo actuel" />}
+                        <input id="brand-logo" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={handleLogoChange} />
+                        {settings.has_logo && (
+                            <button type="button" className="btn-secondary" disabled={busy} onClick={handleRemoveLogo}>Retirer le logo</button>
+                        )}
+                    </div>
+
+                    <label className="field-label" htmlFor="code-prefix">Format des codes de tickets</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <input
+                            id="code-prefix"
+                            className="text-input"
+                            style={{ maxWidth: 140 }}
+                            maxLength={6}
+                            placeholder="Préfixe (ex : WIFI)"
+                            value={sPrefix}
+                            onChange={(e) => setSPrefix(e.target.value.toUpperCase())}
+                        />
+                        <input
+                            type="number"
+                            min="6"
+                            max="12"
+                            className="text-input"
+                            style={{ maxWidth: 110 }}
+                            aria-label="Nombre de caractères après le préfixe"
+                            value={sLength}
+                            onChange={(e) => setSLength(e.target.value)}
+                        />
+                    </div>
+                    <label className="hotspot-check">
+                        <input type="checkbox" checked={sDigits} onChange={(e) => setSDigits(e.target.checked)} />
+                        Codes composés uniquement de chiffres (8 chiffres minimum)
+                    </label>
+                    <p className="empty-hint">
+                        Le préfixe (6 caractères max.) est suivi de 6 à 12 caractères au hasard. Ne s'applique qu'aux prochains lots.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button type="button" className="btn-primary" disabled={busy} onClick={handleSaveSettings}>Enregistrer</button>
+                        <button type="button" className="btn-secondary" disabled={busy} onClick={handleInstallLoginPage}>
+                            Appliquer sur la page de connexion
+                        </button>
+                    </div>
+                    <p className="empty-hint">
+                        Le nom, la couleur et le logo s'affichent sur la page de connexion une fois « Appliquer » cliqué (elle remplace la page actuelle du HotSpot), et sur les prochains PDF de tickets.
+                    </p>
+                </div>
             )}
 
             {showForm && (
@@ -376,6 +687,16 @@ export default function Hotspot() {
                                 onChange={(e) => setNewProfilePartage(e.target.value)}
                             />
 
+                            <label className="field-label" htmlFor="new-profile-rate">Vitesse maximale par client (vide = 2M/2M)</label>
+                            <input
+                                id="new-profile-rate"
+                                className="text-input"
+                                style={{ maxWidth: 160 }}
+                                placeholder="2M/2M"
+                                value={newProfileRate}
+                                onChange={(e) => setNewProfileRate(e.target.value)}
+                            />
+
                             <button
                                 type="button"
                                 className="btn-primary"
@@ -418,6 +739,24 @@ export default function Hotspot() {
                         onChange={(e) => setValiditeJours(e.target.value)}
                         className="text-input"
                     />
+                    <label className="field-label" htmlFor="quota-valeur">
+                        Quota de données par ticket (vide = illimité)
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input
+                            id="quota-valeur"
+                            type="number"
+                            min="1"
+                            className="text-input"
+                            style={{ maxWidth: 120 }}
+                            value={quotaValeur}
+                            onChange={(e) => setQuotaValeur(e.target.value)}
+                        />
+                        <select className="text-input" style={{ maxWidth: 100 }} value={quotaUnite} onChange={(e) => setQuotaUnite(e.target.value)}>
+                            <option value="mo">Mo</option>
+                            <option value="go">Go</option>
+                        </select>
+                    </div>
                     <p className="empty-hint">
                         La durée du forfait est du temps de connexion cumulé (ex : 24 h = 24 heures réellement connectées).
                         La validité est un délai calendaire : passé ce délai, le ticket est supprimé même s'il lui reste du temps.
@@ -445,10 +784,20 @@ export default function Hotspot() {
                                 <span className="empty-hint">
                                     {batchSummary(batch)}
                                     {batch.validite_jours ? ` · validité ${batch.validite_jours} j` : ''}
+                                    {batch.quota_mo ? ` · quota ${formatQuota(batch.quota_mo)}` : ''}
                                 </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <span className="empty-hint">{new Date(batch.created_at).toLocaleDateString()}</span>
+                                <label className="hotspot-check" title="Proposer ce lot sur la page de paiement en ligne">
+                                    <input
+                                        type="checkbox"
+                                        checked={batch.online_sale !== false}
+                                        disabled={busy}
+                                        onChange={() => handleToggleBatchOnline(batch)}
+                                    />
+                                    En ligne
+                                </label>
                                 <button className="btn-secondary" onClick={() => downloadBatchPdf(batch.id)}>
                                     <Download size={14} /> PDF
                                 </button>

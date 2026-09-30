@@ -450,7 +450,12 @@ async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, ver
         try:
             await client.write_file(
                 mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE,
-                mikrotik_scripts.render_login_page(db_router.public_token),
+                mikrotik_scripts.render_login_page(
+                    db_router.public_token,
+                    brand_name=db_router.brand_name,
+                    brand_color=db_router.brand_color,
+                    brand_logo=db_router.brand_logo,
+                ),
             )
             login_page_installed = True
         except Exception:

@@ -111,10 +111,15 @@ class RouterOSClient:
             "comment": comment,
         })
 
-    async def create_hotspot_user(self, name: str, password: str, profile: str, limit_uptime: str | None = None):
+    async def create_hotspot_user(
+        self, name: str, password: str, profile: str,
+        limit_uptime: str | None = None, limit_bytes_total: int | None = None,
+    ):
         payload = {"name": name, "password": password, "profile": profile}
         if limit_uptime:
             payload["limit-uptime"] = limit_uptime
+        if limit_bytes_total:
+            payload["limit-bytes-total"] = str(limit_bytes_total)
         return await self.put("ip/hotspot/user", payload)
 
     async def delete_hotspot_user(self, user_id: str):

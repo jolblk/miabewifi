@@ -6,7 +6,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.colors import HexColor
 
-from app.ros_utils import format_duration_fr, parse_ros_duration
+from app.branding import DEFAULT_BRAND_COLOR, logo_bytes
+from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
 
 
 def _qr_image(data: str):
@@ -24,9 +25,13 @@ def _fit_font_size(c, text: str, font: str, size: float, max_width: float, min_s
     return size
 
 
-def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> bytes:
+def generate_vouchers_pdf(
+    batch, vouchers, wifi_ssid: str | None = None,
+    brand_name: str | None = None, brand_color: str | None = None, brand_logo: str | None = None,
+) -> bytes:
     """Planche de tickets à découper. Chaque ticket indique le code, le prix, la durée,
-    la validité, le nom du Wi-Fi et comment se connecter."""
+    le quota de données, la validité, le nom du Wi-Fi et comment se connecter.
+    Avec un nom, une couleur ou un logo personnalisé, une bande en-tête est ajoutée."""
     buffer = io.BytesIO()
     page_width, page_height = A4
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -41,6 +46,13 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
 
     duree = format_duration_fr(parse_ros_duration(batch.limit_uptime)) if batch.limit_uptime else None
     validite = f"Valable {batch.validite_jours} j après la 1re connexion" if batch.validite_jours else None
+    quota = format_quota_fr(getattr(batch, "quota_mo", None))
+
+    branded = bool(brand_name or brand_color or brand_logo)
+    accent = HexColor(brand_color or DEFAULT_BRAND_COLOR)
+    band_h = 5 * mm if branded else 0
+    logo_png = logo_bytes(brand_logo)
+    logo_reader = ImageReader(io.BytesIO(logo_png)) if logo_png else None
 
     for index, voucher in enumerate(vouchers):
         position_on_page = index % per_page
@@ -55,7 +67,29 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
         top = y + ticket_height
 
         c.setLineWidth(0.5)
+        c.setStrokeColor(HexColor("#000000"))
         c.rect(x, y, ticket_width, ticket_height)
+
+        if branded:
+            c.setFillColor(accent)
+            c.rect(x, top - band_h, ticket_width, band_h, fill=1, stroke=0)
+            text_left = x + pad
+            if logo_reader:
+                c.setFillColor(HexColor("#ffffff"))
+                c.rect(x + 0.6 * mm, top - band_h + 0.6 * mm, band_h - 1.2 * mm, band_h - 1.2 * mm, fill=1, stroke=0)
+                c.drawImage(
+                    logo_reader, x + 0.9 * mm, top - band_h + 0.9 * mm,
+                    width=band_h - 1.8 * mm, height=band_h - 1.8 * mm,
+                    preserveAspectRatio=True, mask="auto",
+                )
+                text_left = x + band_h + 1 * mm
+            if brand_name:
+                c.setFillColor(HexColor("#ffffff"))
+                size = _fit_font_size(c, brand_name, "Helvetica-Bold", 8, ticket_width - (text_left - x) - pad, 5)
+                c.setFont("Helvetica-Bold", size)
+                c.drawString(text_left, top - band_h + 1.6 * mm, brand_name)
+            c.setFillColor(HexColor("#000000"))
+        top -= band_h  # tout le contenu du ticket se place sous la bande
 
         # QR code à gauche
         qr_size = 20 * mm
@@ -78,11 +112,14 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
 
         if duree:
             c.setFont("Helvetica", 7)
-            c.drawString(text_x, top - 22 * mm, f"{duree} de connexion")
+            c.drawString(text_x, top - 21.5 * mm, f"{duree} de connexion")
+        if quota:
+            c.setFont("Helvetica", 7)
+            c.drawString(text_x, top - 24.5 * mm, f"Quota : {quota}")
 
         # Bas du ticket : validité, Wi-Fi et comment se connecter
         full_w = ticket_width - 2 * pad
-        bottom_y = top - 27 * mm
+        bottom_y = top - 28 * mm
         if validite:
             c.setFont("Helvetica", _fit_font_size(c, validite, "Helvetica", 6.5, full_w, 5.5))
             c.drawString(x + pad, bottom_y, validite)
@@ -94,7 +131,12 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
             bottom_y -= 3.2 * mm
         c.setFont("Helvetica", 6)
         howto = "1. Connectez-vous au Wi-Fi. 2. Ouvrez une page web. 3. Saisissez le code ci-dessus (dans Nom d'utilisateur ET Mot de passe si on vous demande les deux)."
+        if branded:
+            howto = "Saisissez ce code sur la page de connexion."
+        ticket_bottom = top - (ticket_height - band_h)
         for line in _wrap_text(c, howto, "Helvetica", 6, full_w)[:3]:
+            if bottom_y < ticket_bottom + 1.5 * mm:
+                break  # jamais de texte hors du cadre
             c.drawString(x + pad, bottom_y, line)
             bottom_y -= 2.8 * mm
 

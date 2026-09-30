@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.config import PAYGATE_AUTH_TOKEN
 from app.database import get_db
-from app.ros_utils import format_duration_fr, parse_ros_duration
+from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
 from app.wireguard import is_router_active
 
 logger = logging.getLogger("miabewifi.hotspot_public")
@@ -78,13 +78,17 @@ def _batch_label(batch: models.VoucherBatch) -> str:
 def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
     """Forfaits achetables : un par (forfait, prix, durée), uniquement s'il reste des tickets."""
     db_router = _get_router_by_token(token, db)
-    if not is_router_active(db_router):
+    if not is_router_active(db_router) or not db_router.online_sales_enabled:
         return []  # vente en ligne suspendue : la page affiche « Aucun forfait disponible »
 
     stock_rows = (
         db.query(models.Voucher.batch_id, func.count(models.Voucher.id))
         .join(models.VoucherBatch, models.Voucher.batch_id == models.VoucherBatch.id)
-        .filter(models.VoucherBatch.router_id == db_router.id, models.Voucher.statut == "AVAILABLE")
+        .filter(
+            models.VoucherBatch.router_id == db_router.id,
+            models.VoucherBatch.online_sale == True,  # noqa: E712 - lots que le client propose en ligne
+            models.Voucher.statut == "AVAILABLE",
+        )
         .group_by(models.Voucher.batch_id)
         .all()
     )
@@ -102,13 +106,14 @@ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
     offers = []
     seen = set()
     for batch in batches:
-        key = (batch.profile_name, batch.prix_unitaire, batch.limit_uptime, batch.validite_jours)
+        key = (batch.profile_name, batch.prix_unitaire, batch.limit_uptime, batch.validite_jours, batch.quota_mo)
         if key in seen:
             continue  # plusieurs lots du même forfait : on n'en propose qu'un
         seen.add(key)
         offers.append({
             "batch_id": batch.id,
             "duree": _batch_label(batch),
+            "quota": format_quota_fr(batch.quota_mo),
             "prix": int(batch.prix_unitaire) if float(batch.prix_unitaire).is_integer() else batch.prix_unitaire,
         })
     return offers
@@ -125,7 +130,7 @@ async def start_payment(
     db_router = _get_router_by_token(token, db)
     # Seul le LANCEMENT d'un nouveau paiement est bloqué. Un client qui a déjà payé juste avant
     # l'expiration reçoit quand même son ticket (webhook, statut, « J'ai déjà payé »).
-    if not is_router_active(db_router):
+    if not is_router_active(db_router) or not db_router.online_sales_enabled:
         raise HTTPException(
             status_code=403,
             detail="La vente en ligne est momentanément indisponible sur ce Wi-Fi. Contactez l'agent sur place.",
@@ -136,7 +141,7 @@ async def start_payment(
         .filter(models.VoucherBatch.id == data.batch_id, models.VoucherBatch.router_id == db_router.id)
         .first()
     )
-    if not batch:
+    if not batch or not batch.online_sale:
         raise HTTPException(status_code=404, detail="Forfait introuvable.")
 
     available = (

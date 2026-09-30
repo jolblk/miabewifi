@@ -39,3 +39,14 @@ def format_duration_fr(seconds: int | None) -> str:
     if seconds % 60 == 0:
         return f"{seconds // 60} min"
     return f"{seconds} s"
+
+
+def format_quota_fr(quota_mo: int | None) -> str | None:
+    """Affichage court d'un quota de données : 500 -> "500 Mo", 1024 -> "1 Go", 1536 -> "1,5 Go"."""
+    if not quota_mo:
+        return None
+    if quota_mo < 1024:
+        return f"{quota_mo} Mo"
+    go = quota_mo / 1024
+    text = f"{go:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+    return f"{text} Go"

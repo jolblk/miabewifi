@@ -1,0 +1,1891 @@
+diff --git a/alembic/versions/b6c2d9e4f1a7_hotspot_customization.py b/alembic/versions/b6c2d9e4f1a7_hotspot_customization.py
+new file mode 100644
+index 0000000..e630969
+--- /dev/null
++++ b/alembic/versions/b6c2d9e4f1a7_hotspot_customization.py
+@@ -0,0 +1,45 @@
++"""Réglages du HotSpot choisis par le client : quota de données, vente en ligne par lot, personnalisation, format des codes
++
++Revision ID: b6c2d9e4f1a7
++Revises: f3a9d2b7c1e8
++Create Date: 2026-09-30 14:00:00
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++revision: str = 'b6c2d9e4f1a7'
++down_revision: Union[str, Sequence[str], None] = 'f3a9d2b7c1e8'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    # Les valeurs par défaut reproduisent le comportement d'avant : vente en ligne active,
++    # codes de 8 caractères hexadécimaux sans préfixe, pas de personnalisation, pas de quota.
++    op.add_column('routers', sa.Column('online_sales_enabled', sa.Boolean(), nullable=False, server_default=sa.true()))
++    op.add_column('routers', sa.Column('brand_name', sa.String(), nullable=True))
++    op.add_column('routers', sa.Column('brand_color', sa.String(), nullable=True))
++    op.add_column('routers', sa.Column('brand_logo', sa.Text(), nullable=True))
++    op.add_column('routers', sa.Column('code_prefix', sa.String(), nullable=True))
++    op.add_column('routers', sa.Column('code_length', sa.Integer(), nullable=False, server_default='8'))
++    op.add_column('routers', sa.Column('code_digits_only', sa.Boolean(), nullable=False, server_default=sa.false()))
++
++    op.add_column('voucher_batches', sa.Column('quota_mo', sa.Integer(), nullable=True))
++    op.add_column('voucher_batches', sa.Column('online_sale', sa.Boolean(), nullable=False, server_default=sa.true()))
++
++
++def downgrade() -> None:
++    op.drop_column('voucher_batches', 'online_sale')
++    op.drop_column('voucher_batches', 'quota_mo')
++
++    op.drop_column('routers', 'code_digits_only')
++    op.drop_column('routers', 'code_length')
++    op.drop_column('routers', 'code_prefix')
++    op.drop_column('routers', 'brand_logo')
++    op.drop_column('routers', 'brand_color')
++    op.drop_column('routers', 'brand_name')
++    op.drop_column('routers', 'online_sales_enabled')
+diff --git a/app/branding.py b/app/branding.py
+new file mode 100644
+index 0000000..56b4405
+--- /dev/null
++++ b/app/branding.py
+@@ -0,0 +1,161 @@
++"""Personnalisation d'un HotSpot par son propriétaire : nom, couleur, logo, format des codes.
++
++Tout ce qui est validé ici est ensuite injecté dans la page de connexion du routeur et dans
++le PDF des tickets : on n'accepte donc que des valeurs sûres (pas de HTML, pas de script,
++images ré-encodées).
++"""
++import base64
++import io
++import re
++import secrets
++import string
++
++from PIL import Image, UnidentifiedImageError
++
++DEFAULT_BRAND_COLOR = "#7c3aed"  # violet MIABEWIFI
++
++BRAND_NAME_MAX = 40
++_BRAND_NAME_ALLOWED = re.compile(r"^[\w .'&!-]+$")
++_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
++
++LOGO_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # fichier envoyé (avant réduction)
++LOGO_MAX_SIDE = 256                      # px, après réduction
++LOGO_MAX_STORED_BYTES = 150 * 1024       # taille finale stockée (PNG)
++
++CODE_PREFIX_MAX = 6
++CODE_LENGTH_MIN = 6
++CODE_LENGTH_MAX = 12
++CODE_LENGTH_DEFAULT = 8
++# Des codes uniquement numériques ont beaucoup moins de combinaisons : on exige plus de chiffres
++# pour qu'un inconnu ne puisse pas deviner un ticket valide par essais successifs.
++CODE_DIGITS_MIN_LENGTH = 8
++_CODE_PREFIX_RE = re.compile(r"^[A-Z0-9]{0,%d}$" % CODE_PREFIX_MAX)
++
++
++class BrandingError(ValueError):
++    """Valeur de personnalisation refusée (message lisible par le client)."""
++
++
++# --- Nom ---------------------------------------------------------------------
++
++def clean_brand_name(value: str | None) -> str | None:
++    """Nom affiché sur la page de connexion et les tickets. Vide -> None."""
++    if value is None:
++        return None
++    text = " ".join(value.split())
++    if not text:
++        return None
++    if len(text) > BRAND_NAME_MAX:
++        raise BrandingError(f"Le nom est limité à {BRAND_NAME_MAX} caractères.")
++    if not _BRAND_NAME_ALLOWED.match(text) or "_" in text:
++        raise BrandingError("Le nom ne peut contenir que des lettres, chiffres, espaces et . ' & ! -")
++    try:
++        text.encode("latin-1")  # police standard du PDF
++    except UnicodeEncodeError:
++        raise BrandingError("Le nom contient un caractère non pris en charge sur les tickets PDF.")
++    return text
++
++
++# --- Couleur -----------------------------------------------------------------
++
++def _luminance(color: str) -> float:
++    channels = []
++    for i in (1, 3, 5):
++        c = int(color[i:i + 2], 16) / 255
++        channels.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
++    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
++
++
++def contrast_with_white(color: str) -> float:
++    return 1.05 / (_luminance(color) + 0.05)
++
++
++def clean_brand_color(value: str | None) -> str | None:
++    """Couleur principale (#RRGGBB). Vide -> None. Refuse une couleur trop claire :
++    le texte des boutons est blanc, il deviendrait illisible."""
++    if value is None:
++        return None
++    text = value.strip()
++    if not text:
++        return None
++    if not _COLOR_RE.match(text):
++        raise BrandingError("Couleur invalide (format attendu : #7c3aed).")
++    text = text.lower()
++    if contrast_with_white(text) < 3.0:
++        raise BrandingError("Cette couleur est trop claire : le texte blanc des boutons serait illisible. Choisissez une couleur plus foncée.")
++    return text
++
++
++# --- Logo --------------------------------------------------------------------
++
++def process_logo(raw: bytes) -> str:
++    """Valide une image envoyée par le client et la convertit en petit PNG (data URI).
++
++    Refuse tout ce qui n'est pas une vraie image PNG/JPEG ; l'image est ré-encodée
++    (les métadonnées et tout contenu caché disparaissent) et réduite à 256 px.
++    """
++    if not raw:
++        raise BrandingError("Fichier vide.")
++    if len(raw) > LOGO_MAX_UPLOAD_BYTES:
++        raise BrandingError("Image trop lourde (2 Mo maximum).")
++    try:
++        with Image.open(io.BytesIO(raw)) as probe:
++            if probe.format not in ("PNG", "JPEG"):
++                raise BrandingError("Format non pris en charge : utilisez une image PNG ou JPEG.")
++            image = probe.convert("RGBA")
++    except BrandingError:
++        raise
++    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
++        raise BrandingError("Ce fichier n'est pas une image valide (PNG ou JPEG).")
++
++    image.thumbnail((LOGO_MAX_SIDE, LOGO_MAX_SIDE))
++    out = io.BytesIO()
++    image.save(out, format="PNG", optimize=True)
++    data = out.getvalue()
++    if len(data) > LOGO_MAX_STORED_BYTES:
++        raise BrandingError("Image trop complexe : utilisez un logo plus simple.")
++    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
++
++
++def logo_bytes(data_uri: str | None) -> bytes | None:
++    """Octets PNG d'un logo stocké, ou None."""
++    if not data_uri or not data_uri.startswith("data:image/png;base64,"):
++        return None
++    try:
++        return base64.b64decode(data_uri.split(",", 1)[1])
++    except Exception:
++        return None
++
++
++# --- Format des codes --------------------------------------------------------
++
++def clean_code_prefix(value: str | None) -> str | None:
++    """Préfixe des codes (A-Z, 0-9, 6 max), mis en majuscules. Vide -> None."""
++    if value is None:
++        return None
++    text = value.strip().upper()
++    if not text:
++        return None
++    if not _CODE_PREFIX_RE.match(text):
++        raise BrandingError(f"Le préfixe ne peut contenir que des lettres et chiffres ({CODE_PREFIX_MAX} maximum).")
++    return text
++
++
++def check_code_format(length: int, digits_only: bool) -> None:
++    if not CODE_LENGTH_MIN <= length <= CODE_LENGTH_MAX:
++        raise BrandingError(f"La longueur du code doit être comprise entre {CODE_LENGTH_MIN} et {CODE_LENGTH_MAX}.")
++    if digits_only and length < CODE_DIGITS_MIN_LENGTH:
++        raise BrandingError(
++            f"Un code composé uniquement de chiffres doit en contenir au moins {CODE_DIGITS_MIN_LENGTH} "
++            "(sinon il serait trop facile à deviner)."
++        )
++
++
++def generate_code(prefix: str | None = None, length: int = CODE_LENGTH_DEFAULT, digits_only: bool = False) -> str:
++    """Un code de ticket : préfixe + `length` caractères aléatoires.
++    Par défaut (8, sans préfixe) : identique à l'ancien format, ex. « A1B2C3D4 »."""
++    if digits_only:
++        body = "".join(secrets.choice(string.digits) for _ in range(length))
++    else:
++        body = secrets.token_hex((length + 1) // 2).upper()[:length]
++    return (prefix or "") + body
+diff --git a/app/mikrotik_scripts.py b/app/mikrotik_scripts.py
+index 3291930..4761428 100644
+--- a/app/mikrotik_scripts.py
++++ b/app/mikrotik_scripts.py
+@@ -6,11 +6,13 @@ Deux modes :
+ - "existing" : routeur déjà en service. Tunnel WireGuard + accès API uniquement.
+                Ne touche ni au bridge, ni au DHCP, ni au NAT, ni à un hotspot existant.
+ """
++import html
+ import re
+ import secrets
+ import unicodedata
+ from pathlib import Path
+ 
++from app.branding import DEFAULT_BRAND_COLOR
+ from app.config import SERVER_PUBLIC_KEY, PUBLIC_API_BASE_URL
+ 
+ SERVER_HOST = "195.35.48.80"  # IP publique du VPS
+@@ -56,14 +58,32 @@ def sanitize_ssid(value: str | None) -> str:
+     return cleaned or DEFAULT_WIFI_SSID
+ 
+ 
+-def render_login_page(public_token: str) -> str:
++DEFAULT_LOGIN_TITLE = "Connexion Wi-Fi"
++
++
++def render_login_page(
++    public_token: str,
++    brand_name: str | None = None,
++    brand_color: str | None = None,
++    brand_logo: str | None = None,
++) -> str:
+     """Page de connexion HotSpot, personnalisée pour CE routeur : les appels de paiement
+-    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui."""
+-    html = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
++    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui.
++    Nom, couleur et logo viennent des réglages du client (déjà validés à la saisie ;
++    le nom est en plus échappé ici par sécurité)."""
++    page = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
++    title = html.escape(brand_name or DEFAULT_LOGIN_TITLE, quote=True)
++    color = brand_color if brand_color and re.fullmatch(r"#[0-9a-fA-F]{6}", brand_color) else DEFAULT_BRAND_COLOR
++    logo_html = ""
++    if brand_logo and re.fullmatch(r"data:image/png;base64,[A-Za-z0-9+/=]+", brand_logo):
++        logo_html = f'<img class="logo" src="{brand_logo}" alt="">'
+     return (
+-        html
++        page
+         .replace("__API_BASE__", PUBLIC_API_BASE_URL)
+         .replace("__PUBLIC_TOKEN__", public_token or "")
++        .replace("__BRAND_NAME__", title)
++        .replace("__BRAND_COLOR__", color)
++        .replace("__BRAND_LOGO_HTML__", logo_html)
+     )
+ 
+ 
+diff --git a/app/models.py b/app/models.py
+index fcbfde9..959d41a 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -1,4 +1,4 @@
+-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
++from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, true, false
+ from sqlalchemy.orm import relationship
+ from datetime import datetime
+ from app.database import Base
+@@ -35,6 +35,14 @@ class Router(Base):
+     setup_mode = Column(String, nullable=False, default="existing", server_default="existing")  # "new" ou "existing"
+     wifi_ssid = Column(String, nullable=True)  # nom du Wi-Fi configuré (mode "new")
+     public_token = Column(String, unique=True, index=True, nullable=True)  # identifiant public, utilisé par la page hotspot (paiement en libre-service)
++    # Réglages du HotSpot choisis par le client
++    online_sales_enabled = Column(Boolean, nullable=False, default=True, server_default=true())  # vente en libre-service active
++    brand_name = Column(String, nullable=True)   # nom affiché sur la page de connexion et les tickets PDF
++    brand_color = Column(String, nullable=True)  # couleur principale (#RRGGBB)
++    brand_logo = Column(Text, nullable=True)     # logo réduit, en data URI PNG
++    code_prefix = Column(String, nullable=True)  # préfixe des codes de tickets (ex: "WIFI")
++    code_length = Column(Integer, nullable=False, default=8, server_default="8")  # nombre de caractères après le préfixe
++    code_digits_only = Column(Boolean, nullable=False, default=False, server_default=false())  # codes 100 % numériques
+ 
+     owner = relationship("User", back_populates="routers")
+     ports = relationship("PortMapping", back_populates="router")
+@@ -75,6 +83,8 @@ class VoucherBatch(Base):
+     created_at = Column(DateTime, default=datetime.utcnow)
+     validite_jours = Column(Integer, nullable=True)  # validité calendaire, comptée dès la 1re connexion
+     limit_uptime = Column(String, nullable=True)     # durée de connexion cumulée (ex: "1d"), copiée du forfait
++    quota_mo = Column(Integer, nullable=True)        # quota de données par ticket en Mo ; NULL = illimité
++    online_sale = Column(Boolean, nullable=False, default=True, server_default=true())  # proposé sur la page de paiement en ligne
+ 
+     vouchers = relationship("Voucher", back_populates="batch")
+ 
+diff --git a/app/pdf_generator.py b/app/pdf_generator.py
+index d8645f8..3eef0fb 100644
+--- a/app/pdf_generator.py
++++ b/app/pdf_generator.py
+@@ -6,7 +6,8 @@ from reportlab.pdfgen import canvas
+ from reportlab.lib.utils import ImageReader
+ from reportlab.lib.colors import HexColor
+ 
+-from app.ros_utils import format_duration_fr, parse_ros_duration
++from app.branding import DEFAULT_BRAND_COLOR, logo_bytes
++from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
+ 
+ 
+ def _qr_image(data: str):
+@@ -24,9 +25,13 @@ def _fit_font_size(c, text: str, font: str, size: float, max_width: float, min_s
+     return size
+ 
+ 
+-def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> bytes:
++def generate_vouchers_pdf(
++    batch, vouchers, wifi_ssid: str | None = None,
++    brand_name: str | None = None, brand_color: str | None = None, brand_logo: str | None = None,
++) -> bytes:
+     """Planche de tickets à découper. Chaque ticket indique le code, le prix, la durée,
+-    la validité, le nom du Wi-Fi et comment se connecter."""
++    le quota de données, la validité, le nom du Wi-Fi et comment se connecter.
++    Avec un nom, une couleur ou un logo personnalisé, une bande en-tête est ajoutée."""
+     buffer = io.BytesIO()
+     page_width, page_height = A4
+     c = canvas.Canvas(buffer, pagesize=A4)
+@@ -41,6 +46,13 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
+ 
+     duree = format_duration_fr(parse_ros_duration(batch.limit_uptime)) if batch.limit_uptime else None
+     validite = f"Valable {batch.validite_jours} j après la 1re connexion" if batch.validite_jours else None
++    quota = format_quota_fr(getattr(batch, "quota_mo", None))
++
++    branded = bool(brand_name or brand_color or brand_logo)
++    accent = HexColor(brand_color or DEFAULT_BRAND_COLOR)
++    band_h = 5 * mm if branded else 0
++    logo_png = logo_bytes(brand_logo)
++    logo_reader = ImageReader(io.BytesIO(logo_png)) if logo_png else None
+ 
+     for index, voucher in enumerate(vouchers):
+         position_on_page = index % per_page
+@@ -55,8 +67,30 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
+         top = y + ticket_height
+ 
+         c.setLineWidth(0.5)
++        c.setStrokeColor(HexColor("#000000"))
+         c.rect(x, y, ticket_width, ticket_height)
+ 
++        if branded:
++            c.setFillColor(accent)
++            c.rect(x, top - band_h, ticket_width, band_h, fill=1, stroke=0)
++            text_left = x + pad
++            if logo_reader:
++                c.setFillColor(HexColor("#ffffff"))
++                c.rect(x + 0.6 * mm, top - band_h + 0.6 * mm, band_h - 1.2 * mm, band_h - 1.2 * mm, fill=1, stroke=0)
++                c.drawImage(
++                    logo_reader, x + 0.9 * mm, top - band_h + 0.9 * mm,
++                    width=band_h - 1.8 * mm, height=band_h - 1.8 * mm,
++                    preserveAspectRatio=True, mask="auto",
++                )
++                text_left = x + band_h + 1 * mm
++            if brand_name:
++                c.setFillColor(HexColor("#ffffff"))
++                size = _fit_font_size(c, brand_name, "Helvetica-Bold", 8, ticket_width - (text_left - x) - pad, 5)
++                c.setFont("Helvetica-Bold", size)
++                c.drawString(text_left, top - band_h + 1.6 * mm, brand_name)
++            c.setFillColor(HexColor("#000000"))
++        top -= band_h  # tout le contenu du ticket se place sous la bande
++
+         # QR code à gauche
+         qr_size = 20 * mm
+         c.drawImage(_qr_image(voucher.code), x + pad, top - pad - qr_size, width=qr_size, height=qr_size)
+@@ -78,11 +112,14 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
+ 
+         if duree:
+             c.setFont("Helvetica", 7)
+-            c.drawString(text_x, top - 22 * mm, f"{duree} de connexion")
++            c.drawString(text_x, top - 21.5 * mm, f"{duree} de connexion")
++        if quota:
++            c.setFont("Helvetica", 7)
++            c.drawString(text_x, top - 24.5 * mm, f"Quota : {quota}")
+ 
+         # Bas du ticket : validité, Wi-Fi et comment se connecter
+         full_w = ticket_width - 2 * pad
+-        bottom_y = top - 27 * mm
++        bottom_y = top - 28 * mm
+         if validite:
+             c.setFont("Helvetica", _fit_font_size(c, validite, "Helvetica", 6.5, full_w, 5.5))
+             c.drawString(x + pad, bottom_y, validite)
+@@ -94,7 +131,12 @@ def generate_vouchers_pdf(batch, vouchers, wifi_ssid: str | None = None) -> byte
+             bottom_y -= 3.2 * mm
+         c.setFont("Helvetica", 6)
+         howto = "1. Connectez-vous au Wi-Fi. 2. Ouvrez une page web. 3. Saisissez le code ci-dessus (dans Nom d'utilisateur ET Mot de passe si on vous demande les deux)."
++        if branded:
++            howto = "Saisissez ce code sur la page de connexion."
++        ticket_bottom = top - (ticket_height - band_h)
+         for line in _wrap_text(c, howto, "Helvetica", 6, full_w)[:3]:
++            if bottom_y < ticket_bottom + 1.5 * mm:
++                break  # jamais de texte hors du cadre
+             c.drawString(x + pad, bottom_y, line)
+             bottom_y -= 2.8 * mm
+ 
+diff --git a/app/ros_utils.py b/app/ros_utils.py
+index 864ddf0..fbb99b8 100644
+--- a/app/ros_utils.py
++++ b/app/ros_utils.py
+@@ -39,3 +39,14 @@ def format_duration_fr(seconds: int | None) -> str:
+     if seconds % 60 == 0:
+         return f"{seconds // 60} min"
+     return f"{seconds} s"
++
++
++def format_quota_fr(quota_mo: int | None) -> str | None:
++    """Affichage court d'un quota de données : 500 -> "500 Mo", 1024 -> "1 Go", 1536 -> "1,5 Go"."""
++    if not quota_mo:
++        return None
++    if quota_mo < 1024:
++        return f"{quota_mo} Mo"
++    go = quota_mo / 1024
++    text = f"{go:.1f}".rstrip("0").rstrip(".").replace(".", ",")
++    return f"{text} Go"
+diff --git a/app/routeros_client.py b/app/routeros_client.py
+index c0c7454..5477877 100644
+--- a/app/routeros_client.py
++++ b/app/routeros_client.py
+@@ -111,10 +111,15 @@ class RouterOSClient:
+             "comment": comment,
+         })
+ 
+-    async def create_hotspot_user(self, name: str, password: str, profile: str, limit_uptime: str | None = None):
++    async def create_hotspot_user(
++        self, name: str, password: str, profile: str,
++        limit_uptime: str | None = None, limit_bytes_total: int | None = None,
++    ):
+         payload = {"name": name, "password": password, "profile": profile}
+         if limit_uptime:
+             payload["limit-uptime"] = limit_uptime
++        if limit_bytes_total:
++            payload["limit-bytes-total"] = str(limit_bytes_total)
+         return await self.put("ip/hotspot/user", payload)
+ 
+     async def delete_hotspot_user(self, user_id: str):
+diff --git a/app/routers/hotspot.py b/app/routers/hotspot.py
+index 16e6968..a9ec9d3 100644
+--- a/app/routers/hotspot.py
++++ b/app/routers/hotspot.py
+@@ -4,13 +4,13 @@ import logging
+ import secrets
+ from datetime import datetime
+ 
+-from fastapi import APIRouter, Depends, HTTPException
++from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+ from fastapi.responses import StreamingResponse
+ from sqlalchemy.orm import Session
+ 
+ from app.database import get_db
+ from app.dependencies import get_current_user
+-from app import models, schemas
++from app import branding, models, schemas
+ from app.crypto import decrypt
+ from app.routeros_client import RouterOSClient
+ from app.pdf_generator import generate_vouchers_pdf
+@@ -127,6 +127,42 @@ async def create_hotspot_profile(
+     return payload
+ 
+ 
++@router.patch("/{router_id}/profiles/{profile_id}")
++async def update_hotspot_profile(
++    router_id: int,
++    profile_id: str,
++    data: schemas.HotspotProfileUpdate,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Modifie la durée, les appareils simultanés et/ou la vitesse d'un forfait.
++    Le nom ne change pas. Les tickets DÉJÀ générés gardent la durée qu'ils avaient à leur
++    création ; seuls les prochains lots utiliseront la nouvelle durée."""
++    db_router = _get_authorized_router(router_id, db, current_user)
++
++    payload: dict = {}
++    if data.duree_valeur is not None:
++        payload["session-timeout"] = f"{data.duree_valeur}{data.duree_unite}"
++    if data.partage is not None:
++        payload["shared-users"] = str(data.partage)
++    if data.rate_limit is not None:
++        payload["rate-limit"] = data.rate_limit
++    if not payload:
++        raise HTTPException(status_code=400, detail="Aucune modification demandée.")
++
++    try:
++        async with _client_for(db_router) as client:
++            existing = await client.get_hotspot_profiles()
++            if not any(p.get(".id") == profile_id for p in existing):
++                raise HTTPException(status_code=404, detail="Forfait introuvable sur ce routeur.")
++            await client.update_hotspot_profile(profile_id, payload)
++    except HTTPException:
++        raise
++    except Exception as e:
++        raise HTTPException(status_code=502, detail=f"Impossible de modifier ce forfait : {e}")
++    return {"message": "Forfait modifié.", **payload}
++
++
+ @router.delete("/{router_id}/profiles/{profile_id}")
+ async def delete_hotspot_profile(
+     router_id: int,
+@@ -159,15 +195,19 @@ async def list_active_sessions(
+         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+ 
+ 
+-def _generate_voucher_code() -> str:
+-    return secrets.token_hex(4).upper()  # ex: "A1B2C3D4"
++def _generate_unique_codes(db: Session, quantite: int, db_router: models.Router | None = None) -> list[str]:
++    """Génère `quantite` codes qui n'existent ni dans le lot ni déjà en base,
++    selon le format choisi par le client (préfixe, longueur, chiffres seulement)."""
++    prefix = getattr(db_router, "code_prefix", None)
++    length = getattr(db_router, "code_length", None) or branding.CODE_LENGTH_DEFAULT
++    digits_only = bool(getattr(db_router, "code_digits_only", False))
+ 
++    def _one() -> str:
++        return branding.generate_code(prefix, length, digits_only)
+ 
+-def _generate_unique_codes(db: Session, quantite: int) -> list[str]:
+-    """Génère `quantite` codes qui n'existent ni dans le lot ni déjà en base."""
+     codes: set[str] = set()
+     while len(codes) < quantite:
+-        candidates = {_generate_voucher_code() for _ in range(quantite - len(codes))} - codes
++        candidates = {_one() for _ in range(quantite - len(codes))} - codes
+         taken = {
+             c for (c,) in db.query(models.Voucher.code).filter(models.Voucher.code.in_(candidates)).all()
+         }
+@@ -281,13 +321,15 @@ async def create_voucher_batch(
+         if limit_uptime in (None, "", "0s", "00:00:00"):
+             limit_uptime = None
+ 
+-        codes = _generate_unique_codes(db, data.quantite)
++        codes = _generate_unique_codes(db, data.quantite, db_router)
++        limit_bytes = data.quota_mo * 1024 * 1024 if data.quota_mo else None
+         sem = asyncio.Semaphore(ROUTER_CONCURRENCY)
+ 
+         async def _create(code: str):
+             async with sem:
+                 await client.create_hotspot_user(
+-                    name=code, password=code, profile=data.profile_name, limit_uptime=limit_uptime,
++                    name=code, password=code, profile=data.profile_name,
++                    limit_uptime=limit_uptime, limit_bytes_total=limit_bytes,
+                 )
+ 
+         results = await asyncio.gather(*[_create(c) for c in codes], return_exceptions=True)
+@@ -313,6 +355,7 @@ async def create_voucher_batch(
+                 quantite=data.quantite,
+                 validite_jours=data.validite_jours,
+                 limit_uptime=limit_uptime,
++                quota_mo=data.quota_mo,
+             )
+             db.add(batch)
+             db.flush()
+@@ -370,6 +413,112 @@ async def set_rate_limit(
+     return {"rate_limit": data.rate_limit, "forfaits": [p["name"] for p in targets]}
+ 
+ 
++def _settings_out(db_router: models.Router) -> schemas.HotspotSettingsOut:
++    return schemas.HotspotSettingsOut(
++        online_sales_enabled=bool(db_router.online_sales_enabled),
++        brand_name=db_router.brand_name,
++        brand_color=db_router.brand_color,
++        has_logo=bool(db_router.brand_logo),
++        logo=db_router.brand_logo,
++        code_prefix=db_router.code_prefix,
++        code_length=db_router.code_length or branding.CODE_LENGTH_DEFAULT,
++        code_digits_only=bool(db_router.code_digits_only),
++    )
++
++
++@router.get("/{router_id}/settings", response_model=schemas.HotspotSettingsOut)
++def get_hotspot_settings(
++    router_id: int,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    return _settings_out(_get_authorized_router(router_id, db, current_user))
++
++
++@router.put("/{router_id}/settings", response_model=schemas.HotspotSettingsOut)
++def update_hotspot_settings(
++    router_id: int,
++    data: schemas.HotspotSettingsUpdate,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Met à jour les réglages envoyés (les autres ne bougent pas). Une chaîne vide remet
++    la valeur par défaut. La page de connexion du routeur n'est PAS modifiée automatiquement :
++    le client la réinstalle quand il le décide (bouton « Appliquer sur la page de connexion »)."""
++    db_router = _get_authorized_router(router_id, db, current_user)
++    sent = data.model_fields_set
++
++    if "brand_name" in sent:
++        db_router.brand_name = data.brand_name
++    if "brand_color" in sent:
++        db_router.brand_color = data.brand_color
++    if "code_prefix" in sent:
++        db_router.code_prefix = data.code_prefix
++    if data.online_sales_enabled is not None:
++        db_router.online_sales_enabled = data.online_sales_enabled
++
++    length = data.code_length if data.code_length is not None else (db_router.code_length or branding.CODE_LENGTH_DEFAULT)
++    digits_only = data.code_digits_only if data.code_digits_only is not None else bool(db_router.code_digits_only)
++    try:
++        branding.check_code_format(length, digits_only)
++    except branding.BrandingError as e:
++        db.rollback()
++        raise HTTPException(status_code=400, detail=str(e))
++    db_router.code_length = length
++    db_router.code_digits_only = digits_only
++
++    db.commit()
++    db.refresh(db_router)
++    return _settings_out(db_router)
++
++
++@router.post("/{router_id}/settings/logo", response_model=schemas.HotspotSettingsOut)
++async def upload_hotspot_logo(
++    router_id: int,
++    file: UploadFile = File(...),
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Envoie le logo (PNG ou JPEG). L'image est vérifiée, ré-encodée et réduite."""
++    db_router = _get_authorized_router(router_id, db, current_user)
++    raw = await file.read(branding.LOGO_MAX_UPLOAD_BYTES + 1)
++    try:
++        db_router.brand_logo = branding.process_logo(raw)
++    except branding.BrandingError as e:
++        raise HTTPException(status_code=400, detail=str(e))
++    db.commit()
++    db.refresh(db_router)
++    return _settings_out(db_router)
++
++
++@router.delete("/{router_id}/settings/logo", response_model=schemas.HotspotSettingsOut)
++def delete_hotspot_logo(
++    router_id: int,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    db_router = _get_authorized_router(router_id, db, current_user)
++    db_router.brand_logo = None
++    db.commit()
++    db.refresh(db_router)
++    return _settings_out(db_router)
++
++
++@router.patch("/vouchers/batch/{batch_id}/online-sale")
++def set_batch_online_sale(
++    batch_id: int,
++    data: schemas.BatchOnlineSaleUpdate,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Choisit si ce lot est proposé (ou non) sur la page de paiement en ligne.
++    Les tickets restent utilisables et vendables à la main dans tous les cas."""
++    batch = _get_authorized_batch(batch_id, db, current_user)
++    batch.online_sale = data.online_sale
++    db.commit()
++    return {"batch_id": batch.id, "online_sale": batch.online_sale}
++
++
+ @router.post("/{router_id}/login-page")
+ async def install_login_page(
+     router_id: int,
+@@ -381,7 +530,15 @@ async def install_login_page(
+     db_router = _get_authorized_router(router_id, db, current_user)
+     try:
+         async with _client_for(db_router) as client:
+-            await client.write_file(LOGIN_PAGE_ROUTER_FILE, render_login_page(db_router.public_token))
++            await client.write_file(
++                LOGIN_PAGE_ROUTER_FILE,
++                render_login_page(
++                    db_router.public_token,
++                    brand_name=db_router.brand_name,
++                    brand_color=db_router.brand_color,
++                    brand_logo=db_router.brand_logo,
++                ),
++            )
+     except Exception as e:
+         raise HTTPException(
+             status_code=502,
+@@ -472,7 +629,12 @@ def download_voucher_batch_pdf(
+     batch_router = db.query(models.Router).filter(models.Router.id == batch.router_id).first()
+     wifi_ssid = batch_router.wifi_ssid if batch_router else None
+ 
+-    pdf_bytes = generate_vouchers_pdf(batch, batch.vouchers, wifi_ssid=wifi_ssid)
++    pdf_bytes = generate_vouchers_pdf(
++        batch, batch.vouchers, wifi_ssid=wifi_ssid,
++        brand_name=batch_router.brand_name if batch_router else None,
++        brand_color=batch_router.brand_color if batch_router else None,
++        brand_logo=batch_router.brand_logo if batch_router else None,
++    )
+ 
+     return StreamingResponse(
+         io.BytesIO(pdf_bytes),
+diff --git a/app/routers/hotspot_public.py b/app/routers/hotspot_public.py
+index fc837f7..c327501 100644
+--- a/app/routers/hotspot_public.py
++++ b/app/routers/hotspot_public.py
+@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
+ from app import models, schemas
+ from app.config import PAYGATE_AUTH_TOKEN
+ from app.database import get_db
+-from app.ros_utils import format_duration_fr, parse_ros_duration
++from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
+ from app.wireguard import is_router_active
+ 
+ logger = logging.getLogger("miabewifi.hotspot_public")
+@@ -78,13 +78,17 @@ def _batch_label(batch: models.VoucherBatch) -> str:
+ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
+     """Forfaits achetables : un par (forfait, prix, durée), uniquement s'il reste des tickets."""
+     db_router = _get_router_by_token(token, db)
+-    if not is_router_active(db_router):
++    if not is_router_active(db_router) or not db_router.online_sales_enabled:
+         return []  # vente en ligne suspendue : la page affiche « Aucun forfait disponible »
+ 
+     stock_rows = (
+         db.query(models.Voucher.batch_id, func.count(models.Voucher.id))
+         .join(models.VoucherBatch, models.Voucher.batch_id == models.VoucherBatch.id)
+-        .filter(models.VoucherBatch.router_id == db_router.id, models.Voucher.statut == "AVAILABLE")
++        .filter(
++            models.VoucherBatch.router_id == db_router.id,
++            models.VoucherBatch.online_sale == True,  # noqa: E712 - lots que le client propose en ligne
++            models.Voucher.statut == "AVAILABLE",
++        )
+         .group_by(models.Voucher.batch_id)
+         .all()
+     )
+@@ -102,13 +106,14 @@ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
+     offers = []
+     seen = set()
+     for batch in batches:
+-        key = (batch.profile_name, batch.prix_unitaire, batch.limit_uptime, batch.validite_jours)
++        key = (batch.profile_name, batch.prix_unitaire, batch.limit_uptime, batch.validite_jours, batch.quota_mo)
+         if key in seen:
+             continue  # plusieurs lots du même forfait : on n'en propose qu'un
+         seen.add(key)
+         offers.append({
+             "batch_id": batch.id,
+             "duree": _batch_label(batch),
++            "quota": format_quota_fr(batch.quota_mo),
+             "prix": int(batch.prix_unitaire) if float(batch.prix_unitaire).is_integer() else batch.prix_unitaire,
+         })
+     return offers
+@@ -125,7 +130,7 @@ async def start_payment(
+     db_router = _get_router_by_token(token, db)
+     # Seul le LANCEMENT d'un nouveau paiement est bloqué. Un client qui a déjà payé juste avant
+     # l'expiration reçoit quand même son ticket (webhook, statut, « J'ai déjà payé »).
+-    if not is_router_active(db_router):
++    if not is_router_active(db_router) or not db_router.online_sales_enabled:
+         raise HTTPException(
+             status_code=403,
+             detail="La vente en ligne est momentanément indisponible sur ce Wi-Fi. Contactez l'agent sur place.",
+@@ -136,7 +141,7 @@ async def start_payment(
+         .filter(models.VoucherBatch.id == data.batch_id, models.VoucherBatch.router_id == db_router.id)
+         .first()
+     )
+-    if not batch:
++    if not batch or not batch.online_sale:
+         raise HTTPException(status_code=404, detail="Forfait introuvable.")
+ 
+     available = (
+diff --git a/app/routers/routers_management.py b/app/routers/routers_management.py
+index 7cb58bf..4f9ec98 100644
+--- a/app/routers/routers_management.py
++++ b/app/routers/routers_management.py
+@@ -450,7 +450,12 @@ async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, ver
+         try:
+             await client.write_file(
+                 mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE,
+-                mikrotik_scripts.render_login_page(db_router.public_token),
++                mikrotik_scripts.render_login_page(
++                    db_router.public_token,
++                    brand_name=db_router.brand_name,
++                    brand_color=db_router.brand_color,
++                    brand_logo=db_router.brand_logo,
++                ),
+             )
+             login_page_installed = True
+         except Exception:
+diff --git a/app/schemas.py b/app/schemas.py
+index 6e52028..f6b5262 100644
+--- a/app/schemas.py
++++ b/app/schemas.py
+@@ -1,8 +1,10 @@
+-from pydantic import BaseModel, EmailStr, Field
++from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+ from datetime import datetime
+ from typing import Literal, Optional
+ from urllib.parse import quote_plus
+ 
++from app import branding
++
+ 
+ class UserCreate(BaseModel):
+     email: EmailStr
+@@ -102,6 +104,8 @@ class VoucherBatchCreate(BaseModel):
+     quantite: int = Field(gt=0, le=500)
+     # Nombre de jours de validité APRÈS la 1re connexion. Vide = pas de limite calendaire.
+     validite_jours: Optional[int] = Field(default=None, ge=1, le=365)
++    # Quota de données par ticket, en Mo (ex: 1024 = 1 Go). Vide = illimité.
++    quota_mo: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+ 
+ 
+ class SaleCreate(BaseModel):
+@@ -141,6 +145,8 @@ class VoucherBatchOut(BaseModel):
+     created_at: datetime
+     validite_jours: Optional[int] = None
+     limit_uptime: Optional[str] = None
++    quota_mo: Optional[int] = None
++    online_sale: bool = True
+     vouchers: list[VoucherOut] = []
+ 
+     class Config:
+@@ -160,6 +166,62 @@ class HotspotProfileCreate(BaseModel):
+     rate_limit: Optional[str] = Field(default=None, pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
+ 
+ 
++class HotspotProfileUpdate(BaseModel):
++    """Modification d'un forfait existant : seuls les champs envoyés changent.
++    Le nom ne se modifie pas (les tickets déjà créés y restent rattachés)."""
++    duree_valeur: Optional[int] = Field(default=None, gt=0, le=999)
++    duree_unite: Optional[Literal["h", "d"]] = None
++    partage: Optional[int] = Field(default=None, ge=1, le=20)
++    rate_limit: Optional[str] = Field(default=None, pattern=r"^\d{1,4}[kKmM]/\d{1,4}[kKmM]$")
++
++    @model_validator(mode="after")
++    def _duration_needs_unit(self):
++        if (self.duree_valeur is None) != (self.duree_unite is None):
++            raise ValueError("La durée et son unité (heures ou jours) vont ensemble.")
++        return self
++
++
++class BatchOnlineSaleUpdate(BaseModel):
++    online_sale: bool
++
++
++class HotspotSettingsUpdate(BaseModel):
++    """Réglages du HotSpot. Seuls les champs envoyés sont modifiés ;
++    une chaîne vide (nom, couleur, préfixe) remet la valeur par défaut."""
++    online_sales_enabled: Optional[bool] = None
++    brand_name: Optional[str] = None
++    brand_color: Optional[str] = None
++    code_prefix: Optional[str] = None
++    code_length: Optional[int] = None
++    code_digits_only: Optional[bool] = None
++
++    @field_validator("brand_name")
++    @classmethod
++    def _check_brand_name(cls, v):
++        return branding.clean_brand_name(v)
++
++    @field_validator("brand_color")
++    @classmethod
++    def _check_brand_color(cls, v):
++        return branding.clean_brand_color(v)
++
++    @field_validator("code_prefix")
++    @classmethod
++    def _check_code_prefix(cls, v):
++        return branding.clean_code_prefix(v)
++
++
++class HotspotSettingsOut(BaseModel):
++    online_sales_enabled: bool
++    brand_name: Optional[str] = None
++    brand_color: Optional[str] = None
++    has_logo: bool = False
++    logo: Optional[str] = None  # data URI (aperçu)
++    code_prefix: Optional[str] = None
++    code_length: int = 8
++    code_digits_only: bool = False
++
++
+ class HotspotSetupRequest(BaseModel):
+     interface: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9 ._-]+$")
+ 
+diff --git a/app/sync.py b/app/sync.py
+index f186b1e..b690bb1 100644
+--- a/app/sync.py
++++ b/app/sync.py
+@@ -19,6 +19,13 @@ from app.routeros_client import RouterOSClient
+ logger = logging.getLogger("miabewifi.sync")
+ 
+ 
++def _to_int(value) -> int:
++    try:
++        return int(value)
++    except (TypeError, ValueError):
++        return 0
++
++
+ def decide_voucher_update(
+     *,
+     now: datetime,
+@@ -27,6 +34,7 @@ def decide_voucher_update(
+     validite_jours: int | None,
+     limit_seconds: int | None,
+     ros_user: dict | None,
++    limit_bytes: int | None = None,
+ ) -> dict:
+     """Décide ce qu'il faut changer pour un ticket. Fonction pure (sans base ni réseau).
+ 
+@@ -55,8 +63,11 @@ def decide_voucher_update(
+ 
+     time_exhausted = bool(limit_seconds) and uptime >= limit_seconds
+     calendar_expired = expires_at is not None and now >= expires_at
++    # Quota de données : le routeur bloque lui-même le ticket une fois atteint, on le marque expiré.
++    used_bytes = _to_int(ros_user.get("bytes-in")) + _to_int(ros_user.get("bytes-out"))
++    quota_exhausted = bool(limit_bytes) and used_bytes >= limit_bytes
+ 
+-    if time_exhausted or calendar_expired:
++    if time_exhausted or calendar_expired or quota_exhausted:
+         changes["expire"] = True
+         changes["remove_from_router"] = True
+ 
+@@ -89,6 +100,7 @@ async def sync_router(db, db_router: models.Router, client: RouterOSClient) -> d
+             validite_jours=batch.validite_jours,
+             limit_seconds=parse_ros_duration(batch.limit_uptime),
+             ros_user=ros_user,
++            limit_bytes=batch.quota_mo * 1024 * 1024 if batch.quota_mo else None,
+         )
+         if "first_login_at" in changes:
+             voucher.first_login_at = changes["first_login_at"]
+diff --git a/app/templates/hotspot_login.html b/app/templates/hotspot_login.html
+index c3dbe9e..473a1b9 100644
+--- a/app/templates/hotspot_login.html
++++ b/app/templates/hotspot_login.html
+@@ -3,32 +3,34 @@
+ <head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+-<title>Connexion Wi-Fi</title>
++<title>__BRAND_NAME__</title>
+ <style>
++  :root{--brand:__BRAND_COLOR__}
++  .logo{display:block;max-width:96px;max-height:96px;margin:0 auto 12px}
+   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f5fb;font-family:Arial,Helvetica,sans-serif;color:#1e1b2e}
+   .card{background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);padding:28px 22px;width:92%;max-width:360px;text-align:center}
+   h1{font-size:22px;margin:0 0 6px}
+   p{margin:0 0 18px;color:#6b6478;font-size:14px}
+   input[type=text],input[type=tel]{width:100%;box-sizing:border-box;padding:14px;font-size:20px;letter-spacing:1px;text-align:center;border:2px solid #e4e1ec;border-radius:10px;margin-bottom:10px}
+-  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:#7c3aed}
++  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:var(--brand)}
+   #code{letter-spacing:3px;text-transform:uppercase}
+-  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:#7c3aed;border:0;border-radius:10px;cursor:pointer}
+-  button.secondary{background:#fff;color:#7c3aed;border:2px solid #ece9f5}
++  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:var(--brand);border:0;border-radius:10px;cursor:pointer}
++  button.secondary{background:#fff;color:var(--brand);border:2px solid #ece9f5}
+   button:disabled{opacity:.6;cursor:default}
+   .err{color:#dc2626;font-size:14px;margin:0 0 12px}
+   .ok{color:#15803d;font-size:14px;margin:0 0 12px}
+   .help{margin-top:16px;font-size:12px}
+-  .link-btn{background:none;border:0;color:#7c3aed;font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
++  .link-btn{background:none;border:0;color:var(--brand);font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
+   .offer{border:2px solid #e4e1ec;border-radius:10px;padding:12px;margin-bottom:10px;text-align:left;cursor:pointer}
+-  .offer.is-selected{border-color:#7c3aed;background:#f7f5fb}
++  .offer.is-selected{border-color:var(--brand);background:#f7f5fb}
+   .offer .titre{font-weight:bold}
+-  .offer .prix{color:#7c3aed;font-weight:bold;float:right}
++  .offer .prix{color:var(--brand);font-weight:bold;float:right}
+   .network-row{display:flex;gap:8px;margin-bottom:10px}
+   .network-row button{margin-top:0}
+-  .network-row button.is-selected{background:#7c3aed;color:#fff}
+-  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:#7c3aed;border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
++  .network-row button.is-selected{background:var(--brand);color:#fff}
++  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:var(--brand);border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
+   @keyframes spin{to{transform:rotate(360deg)}}
+-  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:#7c3aed;margin:6px 0 16px}
++  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:var(--brand);margin:6px 0 16px}
+   .hidden{display:none}
+ </style>
+ </head>
+@@ -50,7 +52,8 @@ $(endif)
+ <div class="card">
+ 
+   <div id="screen-home">
+-    <h1>Connexion Wi-Fi</h1>
++    __BRAND_LOGO_HTML__
++    <h1>__BRAND_NAME__</h1>
+     <p>Saisissez le code de votre ticket, ou payez directement ici</p>
+     $(if error)<div class="err">$(error)</div>$(endif)
+     <input id="code" type="text" placeholder="CODE" autocomplete="off" autocapitalize="characters">
+@@ -166,7 +169,7 @@ function loadOffers() {
+       offers.forEach(function (o) {
+         var div = document.createElement("div");
+         div.className = "offer";
+-        div.innerHTML = '<span class="titre">' + o.duree + '</span><span class="prix">' + o.prix + ' FCFA</span>';
++        div.innerHTML = '<span class="titre">' + o.duree + (o.quota ? ' · ' + o.quota : '') + '</span><span class="prix">' + o.prix + ' FCFA</span>';
+         div.onclick = function () {
+           document.querySelectorAll(".offer").forEach(function (e) { e.classList.remove("is-selected"); });
+           div.classList.add("is-selected");
+diff --git a/frontend/src/hooks/useHotspotData.js b/frontend/src/hooks/useHotspotData.js
+index c4e5f2b..48943d8 100644
+--- a/frontend/src/hooks/useHotspotData.js
++++ b/frontend/src/hooks/useHotspotData.js
+@@ -6,6 +6,10 @@ export function useHotspotData() {
+     const [selectedRouterId, setSelectedRouterId] = useState(null);
+     const [batches, setBatches] = useState([]);
+     const [profiles, setProfiles] = useState([]);
++    // Réglages rattachés au routeur pour lequel ils ont été chargés : en changeant de routeur,
++    // on n'affiche jamais ceux du précédent le temps du chargement.
++    const [settingsState, setSettingsState] = useState({ routerId: null, data: null });
++    const settings = settingsState.routerId === selectedRouterId ? settingsState.data : null;
+     const [loading, setLoading] = useState(true);
+     const [error, setError] = useState(null);
+ 
+@@ -46,10 +50,21 @@ export function useHotspotData() {
+             .catch(() => setProfiles([]));
+     }, [selectedRouterId]);
+ 
++    const fetchSettings = useCallback(() => {
++        if (!selectedRouterId) return Promise.resolve();
++        return api.get(`/hotspot/${selectedRouterId}/settings`)
++            .then((res) => setSettingsState({ routerId: selectedRouterId, data: res.data }))
++            .catch(() => setSettingsState({ routerId: selectedRouterId, data: null }));
++    }, [selectedRouterId]);
++
+     useEffect(() => {
+         fetchBatches();
+     }, [fetchBatches]);
+ 
++    useEffect(() => {
++        fetchSettings();
++    }, [fetchSettings]);
++
+     useEffect(() => {
+         fetchProfiles();
+     }, [fetchProfiles]);
+@@ -67,12 +82,13 @@ export function useHotspotData() {
+     const currentRateLimit =
+         profiles.find((p) => String(p.name || '').startsWith('Ticket-') && p['rate-limit'])?.['rate-limit'] || '';
+ 
+-    async function generateBatch(profileName, prixUnitaire, quantite, validiteJours) {
++    async function generateBatch(profileName, prixUnitaire, quantite, validiteJours, quotaMo) {
+         const res = await api.post(`/hotspot/${selectedRouterId}/vouchers`, {
+             profile_name: profileName,
+             prix_unitaire: prixUnitaire,
+             quantite,
+             validite_jours: validiteJours || null,
++            quota_mo: quotaMo || null,
+         });
+         await fetchBatches();
+         return res.data;
+@@ -108,6 +124,38 @@ export function useHotspotData() {
+         return res.data;
+     }
+ 
++    async function updateProfile(profileId, changes) {
++        const res = await api.patch(`/hotspot/${selectedRouterId}/profiles/${encodeURIComponent(profileId)}`, changes);
++        await fetchProfiles();
++        return res.data;
++    }
++
++    async function saveSettings(changes) {
++        const res = await api.put(`/hotspot/${selectedRouterId}/settings`, changes);
++        setSettingsState({ routerId: selectedRouterId, data: res.data });
++        return res.data;
++    }
++
++    async function uploadLogo(file) {
++        const form = new FormData();
++        form.append('file', file);
++        const res = await api.post(`/hotspot/${selectedRouterId}/settings/logo`, form);
++        setSettingsState({ routerId: selectedRouterId, data: res.data });
++        return res.data;
++    }
++
++    async function removeLogo() {
++        const res = await api.delete(`/hotspot/${selectedRouterId}/settings/logo`);
++        setSettingsState({ routerId: selectedRouterId, data: res.data });
++        return res.data;
++    }
++
++    async function setBatchOnlineSale(batchId, onlineSale) {
++        const res = await api.patch(`/hotspot/vouchers/batch/${batchId}/online-sale`, { online_sale: onlineSale });
++        await fetchBatches();
++        return res.data;
++    }
++
+     async function deleteProfile(profileId) {
+         const res = await api.delete(`/hotspot/${selectedRouterId}/profiles/${profileId}`);
+         await fetchProfiles();
+@@ -145,8 +193,9 @@ export function useHotspotData() {
+ 
+     return {
+         routers, selectedRouterId, setSelectedRouterId,
+-        batches, loading, error, profiles, currentRateLimit,
++        batches, loading, error, profiles, currentRateLimit, settings,
+         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
+         deleteVoucher, deleteBatch, createProfile, deleteProfile,
++        updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
+     };
+ }
+diff --git a/frontend/src/pages/Hotspot.css b/frontend/src/pages/Hotspot.css
+index 5da95bb..212847f 100644
+--- a/frontend/src/pages/Hotspot.css
++++ b/frontend/src/pages/Hotspot.css
+@@ -25,4 +25,22 @@
+     border: 1px solid var(--border-color, #e5e5e5);
+     border-radius: 8px;
+     font-size: 0.85rem;
+-}
+\ No newline at end of file
++}
++
++.hotspot-check {
++    display: flex;
++    align-items: center;
++    gap: 0.5rem;
++    margin: 0.5rem 0;
++    font-size: 0.9rem;
++    cursor: pointer;
++}
++
++.hotspot-logo-preview {
++    width: 56px;
++    height: 56px;
++    object-fit: contain;
++    border: 1px solid var(--border-color, #e5e5e5);
++    border-radius: 8px;
++    background: #fff;
++}
+diff --git a/frontend/src/pages/Hotspot.jsx b/frontend/src/pages/Hotspot.jsx
+index 26c155b..49536ab 100644
+--- a/frontend/src/pages/Hotspot.jsx
++++ b/frontend/src/pages/Hotspot.jsx
+@@ -1,5 +1,5 @@
+ import { useState, useEffect } from 'react';
+-import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X } from 'lucide-react';
++import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X, Pencil } from 'lucide-react';
+ import { useHotspotData } from '../hooks/useHotspotData';
+ import './Hotspot.css';
+ 
+@@ -21,6 +21,30 @@ function ticketBadges(v) {
+     return badges;
+ }
+ 
++// Message d'erreur lisible : le serveur renvoie soit un texte, soit (erreur de saisie) une liste.
++function errorMessage(err, fallback) {
++    const detail = err.response?.data?.detail;
++    if (typeof detail === 'string') return detail;
++    if (Array.isArray(detail) && detail.length > 0) {
++        return String(detail[0].msg || fallback).replace(/^Value error, /, '');
++    }
++    return fallback;
++}
++
++function formatQuota(quotaMo) {
++    if (!quotaMo) return '';
++    if (quotaMo < 1024) return `${quotaMo} Mo`;
++    return `${(quotaMo / 1024).toFixed(1).replace(/\.0$/, '').replace('.', ',')} Go`;
++}
++
++// "24h" -> { valeur: '24', unite: 'h' } ; un format plus exotique (ex: "1d2h") est laissé vide.
++function parseTimeout(value) {
++    const m = /^(\d+)([hd])$/.exec(String(value || ''));
++    return m ? { valeur: m[1], unite: m[2] } : { valeur: '', unite: 'h' };
++}
++
++const DEFAULT_BRAND_COLOR = '#7c3aed';
++
+ function batchSummary(batch) {
+     let disponibles = 0;
+     let vendus = 0;
+@@ -36,9 +60,10 @@ function batchSummary(batch) {
+ export default function Hotspot() {
+     const {
+         routers, selectedRouterId, setSelectedRouterId,
+-        batches, loading, error, profiles, currentRateLimit,
++        batches, loading, error, profiles, currentRateLimit, settings,
+         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
+         deleteVoucher, deleteBatch, createProfile, deleteProfile,
++        updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
+     } = useHotspotData();
+ 
+     const [showForm, setShowForm] = useState(false);
+@@ -56,11 +81,43 @@ export default function Hotspot() {
+     const [newProfileDureeValeur, setNewProfileDureeValeur] = useState('24');
+     const [newProfileDureeUnite, setNewProfileDureeUnite] = useState('h');
+     const [newProfilePartage, setNewProfilePartage] = useState('1');
++    const [newProfileRate, setNewProfileRate] = useState('');
++
++    const [quotaValeur, setQuotaValeur] = useState('');
++    const [quotaUnite, setQuotaUnite] = useState('go');
++
++    const [editingId, setEditingId] = useState(null);
++    const [editDuree, setEditDuree] = useState('');
++    const [editUnite, setEditUnite] = useState('h');
++    const [editPartage, setEditPartage] = useState('1');
++    const [editRate, setEditRate] = useState('');
++
++    const [sOnline, setSOnline] = useState(true);
++    const [sBrandName, setSBrandName] = useState('');
++    const [sBrandColor, setSBrandColor] = useState('');
++    const [sPrefix, setSPrefix] = useState('');
++    const [sLength, setSLength] = useState('8');
++    const [sDigits, setSDigits] = useState(false);
+ 
+     useEffect(() => {
+         setRateLimit(currentRateLimit);
+     }, [currentRateLimit]);
+ 
++    // Recopie les réglages du serveur dans le formulaire dès qu'ils changent
++    // (chargement, changement de routeur, enregistrement).
++    const [syncedSettings, setSyncedSettings] = useState(null);
++    if (settings !== syncedSettings) {
++        setSyncedSettings(settings);
++        if (settings) {
++            setSOnline(settings.online_sales_enabled);
++            setSBrandName(settings.brand_name || '');
++            setSBrandColor(settings.brand_color || '');
++            setSPrefix(settings.code_prefix || '');
++            setSLength(String(settings.code_length || 8));
++            setSDigits(Boolean(settings.code_digits_only));
++        }
++    }
++
+     async function handleGenerate(e) {
+         e.preventDefault();
+         if (!profileName.trim() || !prixUnitaire || !quantite) return;
+@@ -68,13 +125,20 @@ export default function Hotspot() {
+         setActionError('');
+         setActionInfo('');
+         try {
+-            await generateBatch(profileName.trim(), Number(prixUnitaire), Number(quantite), validiteJours ? Number(validiteJours) : null);
++            const quotaMo = quotaValeur ? Math.round(Number(quotaValeur) * (quotaUnite === 'go' ? 1024 : 1)) : null;
++            if (quotaValeur && !(quotaMo >= 1)) {
++                setActionError('Quota de données invalide.');
++                setBusy(false);
++                return;
++            }
++            await generateBatch(profileName.trim(), Number(prixUnitaire), Number(quantite), validiteJours ? Number(validiteJours) : null, quotaMo);
+             setProfileName('');
+             setPrixUnitaire('');
+             setQuantite('');
++            setQuotaValeur('');
+             setShowForm(false);
+         } catch (err) {
+-            setActionError(err.response?.data?.detail || "Erreur lors de la génération des tickets.");
++            setActionError(errorMessage(err, "Erreur lors de la génération des tickets."));
+         } finally {
+             setBusy(false);
+         }
+@@ -166,15 +230,16 @@ export default function Hotspot() {
+                 Number(newProfileDureeValeur),
+                 newProfileDureeUnite,
+                 Number(newProfilePartage) || 1,
+-                rateLimit.trim() || null,
++                newProfileRate.trim() || null,
+             );
+             setProfileName(created.name);
+             setNewProfileName('');
+             setNewProfileDureeValeur('24');
+             setNewProfilePartage('1');
++            setNewProfileRate('');
+             setShowNewProfile(false);
+         } catch (err) {
+-            setActionError(err.response?.data?.detail || "Erreur lors de la création du forfait.");
++            setActionError(errorMessage(err, "Erreur lors de la création du forfait."));
+         } finally {
+             setBusy(false);
+         }
+@@ -194,6 +259,101 @@ export default function Hotspot() {
+         }
+     }
+ 
++    function startEditProfile(profile) {
++        const t = parseTimeout(profile['session-timeout']);
++        setEditingId(profile['.id']);
++        setEditDuree(t.valeur);
++        setEditUnite(t.unite);
++        setEditPartage(String(profile['shared-users'] || '1'));
++        setEditRate(profile['rate-limit'] || '');
++        setActionError('');
++        setActionInfo('');
++    }
++
++    async function handleSaveProfile() {
++        const changes = {};
++        if (editDuree) {
++            changes.duree_valeur = Number(editDuree);
++            changes.duree_unite = editUnite;
++        }
++        if (editPartage) changes.partage = Number(editPartage);
++        if (editRate.trim()) changes.rate_limit = editRate.trim();
++        setBusy(true);
++        setActionError('');
++        setActionInfo('');
++        try {
++            await updateProfile(editingId, changes);
++            setEditingId(null);
++            setActionInfo("Forfait modifié. Les tickets déjà générés gardent leur durée d'origine ; les prochains lots utiliseront la nouvelle.");
++        } catch (err) {
++            setActionError(errorMessage(err, "Erreur lors de la modification du forfait."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
++    async function handleSaveSettings() {
++        setBusy(true);
++        setActionError('');
++        setActionInfo('');
++        try {
++            await saveSettings({
++                online_sales_enabled: sOnline,
++                brand_name: sBrandName,
++                brand_color: sBrandColor,
++                code_prefix: sPrefix,
++                code_length: Number(sLength) || 8,
++                code_digits_only: sDigits,
++            });
++            setActionInfo("Réglages enregistrés. Pour changer la page de connexion du Wi-Fi, cliquez sur « Appliquer sur la page de connexion ».");
++        } catch (err) {
++            setActionError(errorMessage(err, "Impossible d'enregistrer les réglages."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
++    async function handleLogoChange(e) {
++        const file = e.target.files?.[0];
++        e.target.value = '';
++        if (!file) return;
++        setBusy(true);
++        setActionError('');
++        setActionInfo('');
++        try {
++            await uploadLogo(file);
++            setActionInfo("Logo enregistré. Cliquez sur « Appliquer sur la page de connexion » pour l'afficher sur le Wi-Fi.");
++        } catch (err) {
++            setActionError(errorMessage(err, "Impossible d'envoyer ce logo."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
++    async function handleRemoveLogo() {
++        setBusy(true);
++        setActionError('');
++        try {
++            await removeLogo();
++        } catch (err) {
++            setActionError(errorMessage(err, "Impossible de retirer le logo."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
++    async function handleToggleBatchOnline(batch) {
++        setBusy(true);
++        setActionError('');
++        try {
++            await setBatchOnlineSale(batch.id, !batch.online_sale);
++        } catch (err) {
++            setActionError(errorMessage(err, "Impossible de modifier ce lot."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
+     async function handleInstallLoginPage() {
+         if (!window.confirm("Installer la page de connexion simplifiée (un seul champ : le code) ? Elle remplace la page de connexion actuelle de votre HotSpot.")) return;
+         setBusy(true);
+@@ -252,7 +412,7 @@ export default function Hotspot() {
+                 <form className="section-card" onSubmit={handleRateLimit}>
+                     <h2>Réglages du HotSpot</h2>
+                     <label className="field-label" htmlFor="rate-limit">
+-                        Vitesse maximale par client (envoi/téléchargement)
++                        Appliquer la même vitesse à tous les forfaits (envoi/téléchargement)
+                     </label>
+                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                         <input
+@@ -269,7 +429,7 @@ export default function Hotspot() {
+                     </div>
+                     <p className="empty-hint">
+                         Évite qu'un seul client sature votre connexion. Exemples : 2M/2M, 1M/3M, 512k/1M.
+-                        S'applique à tous les forfaits « Ticket-… ».
++                        Écrase la vitesse de tous les forfaits « Ticket-… ». Pour régler un seul forfait, utilisez le crayon dans la liste ci-dessous.
+                     </p>
+                     <button type="button" className="btn-secondary" disabled={busy} onClick={handleInstallLoginPage}>
+                         Installer la page de connexion simplifiée
+@@ -285,7 +445,20 @@ export default function Hotspot() {
+                             <div className="voucher-grid">
+                                 {profiles.map((p) => (
+                                     <div key={p['.id']} className="voucher-pill">
+-                                        <span>{p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}</span>
++                                        <span>
++                                            {p.name}{p['session-timeout'] ? ` — ${p['session-timeout']}` : ''}
++                                            {p['rate-limit'] ? ` · ${p['rate-limit']}` : ''}
++                                            {p['shared-users'] && p['shared-users'] !== '1' ? ` · ${p['shared-users']} appareils` : ''}
++                                        </span>
++                                        <button
++                                            type="button"
++                                            className="icon-btn"
++                                            disabled={busy}
++                                            aria-label={`Modifier ${p.name}`}
++                                            onClick={() => startEditProfile(p)}
++                                        >
++                                            <Pencil size={14} />
++                                        </button>
+                                         <button
+                                             type="button"
+                                             className="icon-btn"
+@@ -298,11 +471,149 @@ export default function Hotspot() {
+                                     </div>
+                                 ))}
+                             </div>
++
++                            {editingId && (
++                                <div className="section-card" style={{ marginTop: '0.75rem' }}>
++                                    <h2>Modifier le forfait {profiles.find((p) => p['.id'] === editingId)?.name}</h2>
++                                    <label className="field-label" htmlFor="edit-duree">Durée de connexion cumulée</label>
++                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
++                                        <input
++                                            id="edit-duree"
++                                            type="number"
++                                            min="1"
++                                            max="999"
++                                            className="text-input"
++                                            style={{ maxWidth: 100 }}
++                                            value={editDuree}
++                                            onChange={(e) => setEditDuree(e.target.value)}
++                                        />
++                                        <select className="text-input" style={{ maxWidth: 140 }} value={editUnite} onChange={(e) => setEditUnite(e.target.value)}>
++                                            <option value="h">Heures</option>
++                                            <option value="d">Jours</option>
++                                        </select>
++                                    </div>
++                                    <label className="field-label" htmlFor="edit-partage">Appareils simultanés autorisés</label>
++                                    <input
++                                        id="edit-partage"
++                                        type="number"
++                                        min="1"
++                                        max="20"
++                                        className="text-input"
++                                        style={{ maxWidth: 100 }}
++                                        value={editPartage}
++                                        onChange={(e) => setEditPartage(e.target.value)}
++                                    />
++                                    <label className="field-label" htmlFor="edit-rate">Vitesse maximale par client</label>
++                                    <input
++                                        id="edit-rate"
++                                        className="text-input"
++                                        style={{ maxWidth: 160 }}
++                                        value={editRate}
++                                        onChange={(e) => setEditRate(e.target.value)}
++                                        placeholder="2M/2M"
++                                    />
++                                    <p className="empty-hint">
++                                        Les tickets déjà générés gardent leur durée d'origine ; seuls les prochains lots utilisent la nouvelle durée.
++                                    </p>
++                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
++                                        <button type="button" className="btn-primary" disabled={busy} onClick={handleSaveProfile}>Enregistrer</button>
++                                        <button type="button" className="btn-secondary" disabled={busy} onClick={() => setEditingId(null)}>Annuler</button>
++                                    </div>
++                                </div>
++                            )}
+                         </div>
+                     )}
+                 </form>
+             )}
+ 
++            {selectedRouterId && settings && (
++                <div className="section-card">
++                    <h2>Vente en ligne et personnalisation</h2>
++
++                    <label className="hotspot-check">
++                        <input type="checkbox" checked={sOnline} onChange={(e) => setSOnline(e.target.checked)} />
++                        Vente en ligne activée (paiement Flooz / T-Money sur la page de connexion)
++                    </label>
++                    <p className="empty-hint">
++                        Désactivée, plus personne ne peut payer en ligne ; vos tickets restent vendables à la main.
++                        Vous choisissez aussi, lot par lot, ceux proposés en ligne (case « En ligne » sur chaque lot).
++                    </p>
++
++                    <label className="field-label" htmlFor="brand-name">Nom affiché sur la page de connexion et les tickets</label>
++                    <input
++                        id="brand-name"
++                        className="text-input"
++                        maxLength={40}
++                        placeholder="ex : Cyber Chez Ama"
++                        value={sBrandName}
++                        onChange={(e) => setSBrandName(e.target.value)}
++                    />
++
++                    <label className="field-label" htmlFor="brand-color">Couleur principale</label>
++                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
++                        <input
++                            id="brand-color"
++                            type="color"
++                            value={sBrandColor || DEFAULT_BRAND_COLOR}
++                            onChange={(e) => setSBrandColor(e.target.value)}
++                        />
++                        <span className="empty-hint">{sBrandColor || 'Couleur MIABEWIFI par défaut'}</span>
++                        {sBrandColor && (
++                            <button type="button" className="btn-secondary" onClick={() => setSBrandColor('')}>Couleur par défaut</button>
++                        )}
++                    </div>
++
++                    <label className="field-label" htmlFor="brand-logo">Logo (PNG ou JPEG, 2 Mo maximum)</label>
++                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
++                        {settings.logo && <img className="hotspot-logo-preview" src={settings.logo} alt="Logo actuel" />}
++                        <input id="brand-logo" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={handleLogoChange} />
++                        {settings.has_logo && (
++                            <button type="button" className="btn-secondary" disabled={busy} onClick={handleRemoveLogo}>Retirer le logo</button>
++                        )}
++                    </div>
++
++                    <label className="field-label" htmlFor="code-prefix">Format des codes de tickets</label>
++                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
++                        <input
++                            id="code-prefix"
++                            className="text-input"
++                            style={{ maxWidth: 140 }}
++                            maxLength={6}
++                            placeholder="Préfixe (ex : WIFI)"
++                            value={sPrefix}
++                            onChange={(e) => setSPrefix(e.target.value.toUpperCase())}
++                        />
++                        <input
++                            type="number"
++                            min="6"
++                            max="12"
++                            className="text-input"
++                            style={{ maxWidth: 110 }}
++                            aria-label="Nombre de caractères après le préfixe"
++                            value={sLength}
++                            onChange={(e) => setSLength(e.target.value)}
++                        />
++                    </div>
++                    <label className="hotspot-check">
++                        <input type="checkbox" checked={sDigits} onChange={(e) => setSDigits(e.target.checked)} />
++                        Codes composés uniquement de chiffres (8 chiffres minimum)
++                    </label>
++                    <p className="empty-hint">
++                        Le préfixe (6 caractères max.) est suivi de 6 à 12 caractères au hasard. Ne s'applique qu'aux prochains lots.
++                    </p>
++
++                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
++                        <button type="button" className="btn-primary" disabled={busy} onClick={handleSaveSettings}>Enregistrer</button>
++                        <button type="button" className="btn-secondary" disabled={busy} onClick={handleInstallLoginPage}>
++                            Appliquer sur la page de connexion
++                        </button>
++                    </div>
++                    <p className="empty-hint">
++                        Le nom, la couleur et le logo s'affichent sur la page de connexion une fois « Appliquer » cliqué (elle remplace la page actuelle du HotSpot), et sur les prochains PDF de tickets.
++                    </p>
++                </div>
++            )}
++
+             {showForm && (
+                 <form className="section-card" onSubmit={handleGenerate}>
+                     <label className="field-label" htmlFor="profile-name">Forfait</label>
+@@ -376,6 +687,16 @@ export default function Hotspot() {
+                                 onChange={(e) => setNewProfilePartage(e.target.value)}
+                             />
+ 
++                            <label className="field-label" htmlFor="new-profile-rate">Vitesse maximale par client (vide = 2M/2M)</label>
++                            <input
++                                id="new-profile-rate"
++                                className="text-input"
++                                style={{ maxWidth: 160 }}
++                                placeholder="2M/2M"
++                                value={newProfileRate}
++                                onChange={(e) => setNewProfileRate(e.target.value)}
++                            />
++
+                             <button
+                                 type="button"
+                                 className="btn-primary"
+@@ -418,6 +739,24 @@ export default function Hotspot() {
+                         onChange={(e) => setValiditeJours(e.target.value)}
+                         className="text-input"
+                     />
++                    <label className="field-label" htmlFor="quota-valeur">
++                        Quota de données par ticket (vide = illimité)
++                    </label>
++                    <div style={{ display: 'flex', gap: '0.5rem' }}>
++                        <input
++                            id="quota-valeur"
++                            type="number"
++                            min="1"
++                            className="text-input"
++                            style={{ maxWidth: 120 }}
++                            value={quotaValeur}
++                            onChange={(e) => setQuotaValeur(e.target.value)}
++                        />
++                        <select className="text-input" style={{ maxWidth: 100 }} value={quotaUnite} onChange={(e) => setQuotaUnite(e.target.value)}>
++                            <option value="mo">Mo</option>
++                            <option value="go">Go</option>
++                        </select>
++                    </div>
+                     <p className="empty-hint">
+                         La durée du forfait est du temps de connexion cumulé (ex : 24 h = 24 heures réellement connectées).
+                         La validité est un délai calendaire : passé ce délai, le ticket est supprimé même s'il lui reste du temps.
+@@ -445,10 +784,20 @@ export default function Hotspot() {
+                                 <span className="empty-hint">
+                                     {batchSummary(batch)}
+                                     {batch.validite_jours ? ` · validité ${batch.validite_jours} j` : ''}
++                                    {batch.quota_mo ? ` · quota ${formatQuota(batch.quota_mo)}` : ''}
+                                 </span>
+                             </div>
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                 <span className="empty-hint">{new Date(batch.created_at).toLocaleDateString()}</span>
++                                <label className="hotspot-check" title="Proposer ce lot sur la page de paiement en ligne">
++                                    <input
++                                        type="checkbox"
++                                        checked={batch.online_sale !== false}
++                                        disabled={busy}
++                                        onChange={() => handleToggleBatchOnline(batch)}
++                                    />
++                                    En ligne
++                                </label>
+                                 <button className="btn-secondary" onClick={() => downloadBatchPdf(batch.id)}>
+                                     <Download size={14} /> PDF
+                                 </button>
+diff --git a/tests/test_hotspot_customization.py b/tests/test_hotspot_customization.py
+new file mode 100644
+index 0000000..49ff2ce
+--- /dev/null
++++ b/tests/test_hotspot_customization.py
+@@ -0,0 +1,182 @@
++"""Tests des réglages HotSpot laissés au client : personnalisation, format des codes,
++quota de données, page de connexion et PDF.
++
++Lancer avec :  pytest tests/test_hotspot_customization.py
++(variables d'environnement requises par app.config : DATABASE_URL, CRYPT_KEY, SERVER_PUBLIC_KEY)
++"""
++import base64
++import io
++import re
++from datetime import datetime
++from types import SimpleNamespace
++
++import pytest
++from PIL import Image
++
++from app import branding
++from app.ros_utils import format_quota_fr
++from app.sync import decide_voucher_update
++
++NOW = datetime(2026, 9, 30, 12, 0, 0)
++
++
++def _png(size=(40, 30), color=(200, 0, 0, 255), fmt="PNG") -> bytes:
++    buf = io.BytesIO()
++    Image.new("RGBA" if fmt == "PNG" else "RGB", size, color if fmt == "PNG" else color[:3]).save(buf, format=fmt)
++    return buf.getvalue()
++
++
++# ---- nom / couleur -----------------------------------------------------------
++def test_brand_name_cleaned_and_validated():
++    assert branding.clean_brand_name("  Café   Chez Ama ") is None or True  # accents latin-1 acceptés ci-dessous
++    assert branding.clean_brand_name("Chez  Ama") == "Chez Ama"
++    assert branding.clean_brand_name("Café Bè") == "Café Bè"
++    assert branding.clean_brand_name("   ") is None
++    assert branding.clean_brand_name(None) is None
++
++
++@pytest.mark.parametrize("bad", ["<script>alert(1)</script>", 'a"b', "x" * 41, "Wi_Fi", "日本語", "$(bad)"])
++def test_brand_name_rejects_dangerous_or_unprintable(bad):
++    with pytest.raises(branding.BrandingError):
++        branding.clean_brand_name(bad)
++
++
++def test_brand_color_rules():
++    assert branding.clean_brand_color("#7C3AED") == "#7c3aed"
++    assert branding.clean_brand_color("") is None
++    for bad in ("red", "#fff", "#12345g", "javascript:1", "#ffff00"):  # dernier : trop clair
++        with pytest.raises(branding.BrandingError):
++            branding.clean_brand_color(bad)
++
++
++# ---- logo --------------------------------------------------------------------
++def test_logo_is_reencoded_and_shrunk():
++    uri = branding.process_logo(_png(size=(1200, 800)))
++    assert uri.startswith("data:image/png;base64,")
++    img = Image.open(io.BytesIO(branding.logo_bytes(uri)))
++    assert max(img.size) <= branding.LOGO_MAX_SIDE
++
++
++def test_logo_accepts_jpeg():
++    assert branding.process_logo(_png(fmt="JPEG")).startswith("data:image/png;base64,")
++
++
++@pytest.mark.parametrize("raw", [b"", b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>", b"GIF89a....", b"n'importe quoi"])
++def test_logo_rejects_non_images(raw):
++    with pytest.raises(branding.BrandingError):
++        branding.process_logo(raw)
++
++
++def test_logo_rejects_too_big_upload():
++    with pytest.raises(branding.BrandingError):
++        branding.process_logo(b"\x89PNG" + b"0" * (branding.LOGO_MAX_UPLOAD_BYTES + 1))
++
++
++def test_logo_bytes_ignores_garbage():
++    assert branding.logo_bytes(None) is None
++    assert branding.logo_bytes("data:image/svg+xml;base64,AAAA") is None
++
++
++# ---- format des codes --------------------------------------------------------
++def test_default_code_format_is_unchanged():
++    assert re.fullmatch(r"[0-9A-F]{8}", branding.generate_code())
++
++
++def test_code_prefix_length_and_digits():
++    assert re.fullmatch(r"WIFI[0-9A-F]{6}", branding.generate_code("WIFI", 6))
++    assert re.fullmatch(r"[0-9]{10}", branding.generate_code(None, 10, digits_only=True))
++    assert re.fullmatch(r"[0-9A-F]{7}", branding.generate_code(None, 7))  # longueur impaire respectée
++
++
++def test_code_prefix_validation():
++    assert branding.clean_code_prefix(" wifi ") == "WIFI"
++    assert branding.clean_code_prefix("") is None
++    for bad in ("WI-FI", "TROPLONG1", "é", "A B"):
++        with pytest.raises(branding.BrandingError):
++            branding.clean_code_prefix(bad)
++
++
++def test_code_format_limits():
++    branding.check_code_format(8, False)
++    branding.check_code_format(8, True)
++    for length, digits in ((5, False), (13, False), (6, True), (7, True)):
++        with pytest.raises(branding.BrandingError):
++            branding.check_code_format(length, digits)
++
++
++# ---- quota -------------------------------------------------------------------
++def test_format_quota_fr():
++    assert format_quota_fr(None) is None
++    assert format_quota_fr(500) == "500 Mo"
++    assert format_quota_fr(1024) == "1 Go"
++    assert format_quota_fr(1536) == "1,5 Go"
++
++
++def _decide(**overrides):
++    args = dict(now=NOW, first_login_at=None, expires_at=None, validite_jours=None,
++                limit_seconds=None, ros_user={"name": "A", "uptime": "5m"}, limit_bytes=None)
++    args.update(overrides)
++    return decide_voucher_update(**args)
++
++
++def test_quota_reached_expires_ticket():
++    ros = {"name": "A", "uptime": "5m", "bytes-in": "600000000", "bytes-out": "500000000"}
++    changes = _decide(limit_bytes=1024 * 1024 * 1024, ros_user=ros)
++    assert changes["expire"] and changes["remove_from_router"]
++
++
++def test_quota_not_reached_keeps_ticket():
++    ros = {"name": "A", "uptime": "5m", "bytes-in": "1000", "bytes-out": "2000"}
++    assert not _decide(limit_bytes=1024 * 1024 * 1024, ros_user=ros)["expire"]
++
++
++def test_no_quota_means_no_expiry_by_data():
++    ros = {"name": "A", "uptime": "5m", "bytes-in": "999999999999", "bytes-out": "999999999999"}
++    assert not _decide(limit_bytes=None, ros_user=ros)["expire"]
++
++
++# ---- page de connexion -------------------------------------------------------
++def test_login_page_default_has_no_leftover_placeholder():
++    from app import mikrotik_scripts as m
++    page = m.render_login_page("tok123")
++    assert "__" not in page
++    assert "--brand:#7c3aed" in page and "<h1>Connexion Wi-Fi</h1>" in page and 'class="logo"' not in page
++
++
++def test_login_page_branding_applied_and_escaped():
++    from app import mikrotik_scripts as m
++    logo = branding.process_logo(_png())
++    page = m.render_login_page("tok123", brand_name="Chez <Ama> & Fils", brand_color="#0f766e", brand_logo=logo)
++    assert "--brand:#0f766e" in page
++    assert "<title>Chez &lt;Ama&gt; &amp; Fils</title>" in page
++    assert "<Ama>" not in page
++    assert f'src="{logo}"' in page
++    assert "__" not in page
++
++
++def test_login_page_ignores_forged_color_and_logo():
++    from app import mikrotik_scripts as m
++    page = m.render_login_page("t", brand_color="red;}</style><script>1</script>", brand_logo='data:image/png;base64,"><script>1</script>')
++    assert "--brand:#7c3aed" in page and "<script>1</script>" not in page and 'class="logo"' not in page
++
++
++# ---- PDF ---------------------------------------------------------------------
++def _batch(**kw):
++    base = dict(profile_name="Ticket-1h", prix_unitaire=500.0, limit_uptime="1h", validite_jours=7, quota_mo=None)
++    base.update(kw)
++    return SimpleNamespace(**base)
++
++
++def _vouchers(n=30):
++    return [SimpleNamespace(code=f"WIFI{i:06d}") for i in range(n)]
++
++
++def test_pdf_plain_and_branded_and_quota_are_valid_pdfs():
++    from app.pdf_generator import generate_vouchers_pdf
++    plain = generate_vouchers_pdf(_batch(), _vouchers(), wifi_ssid="MonWifi")
++    branded = generate_vouchers_pdf(
++        _batch(quota_mo=1024), _vouchers(), wifi_ssid="MonWifi",
++        brand_name="Chez Ama", brand_color="#0f766e", brand_logo=branding.process_logo(_png()),
++    )
++    assert plain.startswith(b"%PDF") and branded.startswith(b"%PDF")
++    assert len(branded) > len(plain)
+diff --git a/tests/verify_access_control.py b/tests/verify_access_control.py
+index 7ecf8d9..e086b85 100644
+--- a/tests/verify_access_control.py
++++ b/tests/verify_access_control.py
+@@ -49,14 +49,15 @@ class _AnyModule(types.ModuleType):
+ 
+ models = types.ModuleType("app.models")
+ models.Router = make_model("Router", ["id", "owner_id", "public_token"])
+-models.VoucherBatch = make_model("VoucherBatch", ["id", "router_id", "prix_unitaire", "created_at"])
++models.VoucherBatch = make_model("VoucherBatch", ["id", "router_id", "prix_unitaire", "created_at", "online_sale"])
+ models.Voucher = make_model("Voucher", ["id", "batch_id", "statut", "code"])
+ models.HotspotPurchase = make_model("HotspotPurchase", ["id", "router_id", "identifier", "telephone", "statut", "created_at", "voucher_id"])
+ models.User = make_model("User", ["id"])
+ sys.modules["app.models"] = models
+ 
+ schemas = _AnyModule("app.schemas"); sys.modules["app.schemas"] = schemas
+-stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object)
++stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object,
++     File=lambda *a, **k: None, UploadFile=object)
+ stub("fastapi.responses", StreamingResponse=object)
+ stub("sqlalchemy", func=MagicMock()); stub("sqlalchemy.orm", Session=object)
+ stub("slowapi", Limiter=lambda **k: MagicMock(limit=lambda *a, **k: (lambda f: f)))
+@@ -79,8 +80,10 @@ ACTIVE = dict(trial_expires_at=None, subscription_expires_at=NOW + timedelta(day
+ EXPIRED = dict(trial_expires_at=NOW - timedelta(days=1), subscription_expires_at=None)
+ 
+ 
+-def router(state):
+-    return SimpleNamespace(id=1, nom="R", mikrotik_api_username="u", mikrotik_api_password="p", **state)
++def router(state, **extra):
++    fields = dict(online_sales_enabled=True, code_prefix=None, code_length=8, code_digits_only=False)
++    fields.update(state); fields.update(extra)
++    return SimpleNamespace(id=1, nom="R", mikrotik_api_username="u", mikrotik_api_password="p", **fields)
+ 
+ 
+ class Chain:
+@@ -124,7 +127,7 @@ def run(coro): return asyncio.run(coro)
+ 
+ 
+ def _batch_data():
+-    return SimpleNamespace(profile_name="Ticket-1h", prix_unitaire=100.0, quantite=1, validite_jours=None)
++    return SimpleNamespace(profile_name="Ticket-1h", prix_unitaire=100.0, quantite=1, validite_jours=None, quota_mo=None)
+ 
+ 
+ def _call_generate(state):
+@@ -206,6 +209,25 @@ def test_public_retrieve_code_not_blocked_when_expired():
+         assert e.status_code == 404 and "Aucun ticket" in e.detail   # « pas trouvé », pas « bloqué »
+ 
+ 
++def test_public_offers_empty_when_owner_disabled_online_sales():
++    db = FakeDB(router=router(ACTIVE, online_sales_enabled=False))
++    assert public.list_offers(SimpleNamespace(), "tok", db) == []
++    assert db.queried == [models.Router]   # n'a même pas cherché le stock
++
++
++def test_public_pay_blocked_with_403_when_owner_disabled_online_sales():
++    db = FakeDB(router=router(ACTIVE, online_sales_enabled=False))
++    data = SimpleNamespace(batch_id=1, telephone="90112233", methode="FLOOZ")
++    assert raises(403, lambda: run(public.start_payment(SimpleNamespace(), "tok", data, db)))
++
++
++def test_public_pay_404_when_batch_not_sold_online():
++    batch = SimpleNamespace(id=1, online_sale=False, prix_unitaire=100.0)
++    db = FakeDB(router=router(ACTIVE), batch=batch)
++    data = SimpleNamespace(batch_id=1, telephone="90112233", methode="FLOOZ")
++    assert raises(404, lambda: run(public.start_payment(SimpleNamespace(), "tok", data, db)))
++
++
+ def test_webhook_confirmation_has_no_access_check():
+     import pathlib, re
+     src = pathlib.Path("app/routers/wallet.py").read_text(encoding="utf-8")

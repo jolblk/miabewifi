@@ -6,6 +6,10 @@ export function useHotspotData() {
     const [selectedRouterId, setSelectedRouterId] = useState(null);
     const [batches, setBatches] = useState([]);
     const [profiles, setProfiles] = useState([]);
+    // Réglages rattachés au routeur pour lequel ils ont été chargés : en changeant de routeur,
+    // on n'affiche jamais ceux du précédent le temps du chargement.
+    const [settingsState, setSettingsState] = useState({ routerId: null, data: null });
+    const settings = settingsState.routerId === selectedRouterId ? settingsState.data : null;
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -46,9 +50,20 @@ export function useHotspotData() {
             .catch(() => setProfiles([]));
     }, [selectedRouterId]);
 
+    const fetchSettings = useCallback(() => {
+        if (!selectedRouterId) return Promise.resolve();
+        return api.get(`/hotspot/${selectedRouterId}/settings`)
+            .then((res) => setSettingsState({ routerId: selectedRouterId, data: res.data }))
+            .catch(() => setSettingsState({ routerId: selectedRouterId, data: null }));
+    }, [selectedRouterId]);
+
     useEffect(() => {
         fetchBatches();
     }, [fetchBatches]);
+
+    useEffect(() => {
+        fetchSettings();
+    }, [fetchSettings]);
 
     useEffect(() => {
         fetchProfiles();
@@ -67,12 +82,13 @@ export function useHotspotData() {
     const currentRateLimit =
         profiles.find((p) => String(p.name || '').startsWith('Ticket-') && p['rate-limit'])?.['rate-limit'] || '';
 
-    async function generateBatch(profileName, prixUnitaire, quantite, validiteJours) {
+    async function generateBatch(profileName, prixUnitaire, quantite, validiteJours, quotaMo) {
         const res = await api.post(`/hotspot/${selectedRouterId}/vouchers`, {
             profile_name: profileName,
             prix_unitaire: prixUnitaire,
             quantite,
             validite_jours: validiteJours || null,
+            quota_mo: quotaMo || null,
         });
         await fetchBatches();
         return res.data;
@@ -105,6 +121,38 @@ export function useHotspotData() {
             rate_limit: rateLimit || null,
         });
         await fetchProfiles();
+        return res.data;
+    }
+
+    async function updateProfile(profileId, changes) {
+        const res = await api.patch(`/hotspot/${selectedRouterId}/profiles/${encodeURIComponent(profileId)}`, changes);
+        await fetchProfiles();
+        return res.data;
+    }
+
+    async function saveSettings(changes) {
+        const res = await api.put(`/hotspot/${selectedRouterId}/settings`, changes);
+        setSettingsState({ routerId: selectedRouterId, data: res.data });
+        return res.data;
+    }
+
+    async function uploadLogo(file) {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await api.post(`/hotspot/${selectedRouterId}/settings/logo`, form);
+        setSettingsState({ routerId: selectedRouterId, data: res.data });
+        return res.data;
+    }
+
+    async function removeLogo() {
+        const res = await api.delete(`/hotspot/${selectedRouterId}/settings/logo`);
+        setSettingsState({ routerId: selectedRouterId, data: res.data });
+        return res.data;
+    }
+
+    async function setBatchOnlineSale(batchId, onlineSale) {
+        const res = await api.patch(`/hotspot/vouchers/batch/${batchId}/online-sale`, { online_sale: onlineSale });
+        await fetchBatches();
         return res.data;
     }
 
@@ -145,8 +193,9 @@ export function useHotspotData() {
 
     return {
         routers, selectedRouterId, setSelectedRouterId,
-        batches, loading, error, profiles, currentRateLimit,
+        batches, loading, error, profiles, currentRateLimit, settings,
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
         deleteVoucher, deleteBatch, createProfile, deleteProfile,
+        updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
     };
 }

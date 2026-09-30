@@ -6,11 +6,13 @@ Deux modes :
 - "existing" : routeur déjà en service. Tunnel WireGuard + accès API uniquement.
                Ne touche ni au bridge, ni au DHCP, ni au NAT, ni à un hotspot existant.
 """
+import html
 import re
 import secrets
 import unicodedata
 from pathlib import Path
 
+from app.branding import DEFAULT_BRAND_COLOR
 from app.config import SERVER_PUBLIC_KEY, PUBLIC_API_BASE_URL
 
 SERVER_HOST = "195.35.48.80"  # IP publique du VPS
@@ -56,14 +58,32 @@ def sanitize_ssid(value: str | None) -> str:
     return cleaned or DEFAULT_WIFI_SSID
 
 
-def render_login_page(public_token: str) -> str:
+DEFAULT_LOGIN_TITLE = "Connexion Wi-Fi"
+
+
+def render_login_page(
+    public_token: str,
+    brand_name: str | None = None,
+    brand_color: str | None = None,
+    brand_logo: str | None = None,
+) -> str:
     """Page de connexion HotSpot, personnalisée pour CE routeur : les appels de paiement
-    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui."""
-    html = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
+    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui.
+    Nom, couleur et logo viennent des réglages du client (déjà validés à la saisie ;
+    le nom est en plus échappé ici par sécurité)."""
+    page = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
+    title = html.escape(brand_name or DEFAULT_LOGIN_TITLE, quote=True)
+    color = brand_color if brand_color and re.fullmatch(r"#[0-9a-fA-F]{6}", brand_color) else DEFAULT_BRAND_COLOR
+    logo_html = ""
+    if brand_logo and re.fullmatch(r"data:image/png;base64,[A-Za-z0-9+/=]+", brand_logo):
+        logo_html = f'<img class="logo" src="{brand_logo}" alt="">'
     return (
-        html
+        page
         .replace("__API_BASE__", PUBLIC_API_BASE_URL)
         .replace("__PUBLIC_TOKEN__", public_token or "")
+        .replace("__BRAND_NAME__", title)
+        .replace("__BRAND_COLOR__", color)
+        .replace("__BRAND_LOGO_HTML__", logo_html)
     )
 
 

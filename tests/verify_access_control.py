@@ -49,14 +49,15 @@ class _AnyModule(types.ModuleType):
 
 models = types.ModuleType("app.models")
 models.Router = make_model("Router", ["id", "owner_id", "public_token"])
-models.VoucherBatch = make_model("VoucherBatch", ["id", "router_id", "prix_unitaire", "created_at"])
+models.VoucherBatch = make_model("VoucherBatch", ["id", "router_id", "prix_unitaire", "created_at", "online_sale"])
 models.Voucher = make_model("Voucher", ["id", "batch_id", "statut", "code"])
 models.HotspotPurchase = make_model("HotspotPurchase", ["id", "router_id", "identifier", "telephone", "statut", "created_at", "voucher_id"])
 models.User = make_model("User", ["id"])
 sys.modules["app.models"] = models
 
 schemas = _AnyModule("app.schemas"); sys.modules["app.schemas"] = schemas
-stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object)
+stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object,
+     File=lambda *a, **k: None, UploadFile=object)
 stub("fastapi.responses", StreamingResponse=object)
 stub("sqlalchemy", func=MagicMock()); stub("sqlalchemy.orm", Session=object)
 stub("slowapi", Limiter=lambda **k: MagicMock(limit=lambda *a, **k: (lambda f: f)))
@@ -79,8 +80,10 @@ ACTIVE = dict(trial_expires_at=None, subscription_expires_at=NOW + timedelta(day
 EXPIRED = dict(trial_expires_at=NOW - timedelta(days=1), subscription_expires_at=None)
 
 
-def router(state):
-    return SimpleNamespace(id=1, nom="R", mikrotik_api_username="u", mikrotik_api_password="p", **state)
+def router(state, **extra):
+    fields = dict(online_sales_enabled=True, code_prefix=None, code_length=8, code_digits_only=False)
+    fields.update(state); fields.update(extra)
+    return SimpleNamespace(id=1, nom="R", mikrotik_api_username="u", mikrotik_api_password="p", **fields)
 
 
 class Chain:
@@ -124,7 +127,7 @@ def run(coro): return asyncio.run(coro)
 
 
 def _batch_data():
-    return SimpleNamespace(profile_name="Ticket-1h", prix_unitaire=100.0, quantite=1, validite_jours=None)
+    return SimpleNamespace(profile_name="Ticket-1h", prix_unitaire=100.0, quantite=1, validite_jours=None, quota_mo=None)
 
 
 def _call_generate(state):
@@ -204,6 +207,25 @@ def test_public_retrieve_code_not_blocked_when_expired():
         public.retrieve_code(SimpleNamespace(), "tok", data, db)
     except HTTPException as e:
         assert e.status_code == 404 and "Aucun ticket" in e.detail   # « pas trouvé », pas « bloqué »
+
+
+def test_public_offers_empty_when_owner_disabled_online_sales():
+    db = FakeDB(router=router(ACTIVE, online_sales_enabled=False))
+    assert public.list_offers(SimpleNamespace(), "tok", db) == []
+    assert db.queried == [models.Router]   # n'a même pas cherché le stock
+
+
+def test_public_pay_blocked_with_403_when_owner_disabled_online_sales():
+    db = FakeDB(router=router(ACTIVE, online_sales_enabled=False))
+    data = SimpleNamespace(batch_id=1, telephone="90112233", methode="FLOOZ")
+    assert raises(403, lambda: run(public.start_payment(SimpleNamespace(), "tok", data, db)))
+
+
+def test_public_pay_404_when_batch_not_sold_online():
+    batch = SimpleNamespace(id=1, online_sale=False, prix_unitaire=100.0)
+    db = FakeDB(router=router(ACTIVE), batch=batch)
+    data = SimpleNamespace(batch_id=1, telephone="90112233", methode="FLOOZ")
+    assert raises(404, lambda: run(public.start_payment(SimpleNamespace(), "tok", data, db)))
 
 
 def test_webhook_confirmation_has_no_access_check():
