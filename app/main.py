@@ -14,6 +14,7 @@ from app.limiter import limiter
 from app.config import FRONTEND_ORIGINS
 from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot, hotspot_public
 from app.sync import sync_loop
+from app.reconcile import reconcile_loop
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,8 +25,11 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(_app: FastAPI):
     # Synchronise régulièrement les tickets avec les routeurs (connexions, expirations).
     sync_task = asyncio.create_task(sync_loop())
+    # Rattrape les paiements de tickets dont le webhook PayGate n'est jamais arrivé.
+    reconcile_task = asyncio.create_task(reconcile_loop())
     yield
     sync_task.cancel()
+    reconcile_task.cancel()
 
 
 app = FastAPI(title="MIABEWIFI", lifespan=lifespan)

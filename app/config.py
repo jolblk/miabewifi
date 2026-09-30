@@ -52,3 +52,8 @@ PUBLIC_API_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", "https://app.195.35.48.80
 # Frais prélevés sur chaque vente de ticket en libre-service (0.01 = 1 %).
 # Couvre les frais PayGate sur les retraits par API. 0 = aucun frais.
 HOTSPOT_SALE_FEE_RATE = os.getenv("HOTSPOT_SALE_FEE_RATE", "0.01")
+
+
+# Fréquence (en secondes) du rattrapage des paiements de tickets dont le webhook PayGate
+# n'est pas arrivé (on redemande l'état à PayGate). 0 = désactivé.
+PURCHASE_RECONCILE_INTERVAL_SECONDS = int(os.getenv("PURCHASE_RECONCILE_INTERVAL_SECONDS", "30"))
