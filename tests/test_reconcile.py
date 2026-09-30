@@ -40,6 +40,7 @@ def db():
     session.add_all([models.Voucher(batch_id=batch.id, code=f"CODE{i}", statut="AVAILABLE") for i in range(5)])
     session.commit()
     reconcile._last_checked.clear()
+    reconcile._last_checked_recharges.clear()
     yield session
     session.close()
 
@@ -145,3 +146,81 @@ def test_out_of_stock_triggers_refund_flow_not_a_ticket(db):
     db.refresh(p)
     assert p.statut == "rembourse" and p.voucher_id is None
     assert db.query(models.User).first().solde == 0.0
+
+
+
+# ---- Recharges du portefeuille -------------------------------------------
+
+def _recharge(db, identifier, age, statut="en_attente", type_="recharge", montant=1000.0):
+    user = db.query(models.User).first()
+    t = models.Transaction(user_id=user.id, montant=montant, methode="TMONEY", statut=statut,
+                           identifier=identifier, type=type_, created_at=NOW - age)
+    db.add(t)
+    db.commit()
+    return t
+
+
+def _run_recharges(db, succeeded):
+    async def fake(identifier):
+        return succeeded(identifier)
+    reconcile._paygate_payment_succeeded = fake
+    return asyncio.run(reconcile.reconcile_pending_recharges(db, now=NOW))
+
+
+def test_paid_recharge_credits_wallet_once(db):
+    t = _recharge(db, "r1", timedelta(minutes=2))
+    assert _run_recharges(db, lambda i: True) == 1
+    db.refresh(t)
+    assert t.statut == "confirme"
+    assert db.query(models.User).first().solde == 1000.0
+    assert _run_recharges(db, lambda i: True) == 0      # 2e passage : pas de double crédit
+    assert db.query(models.User).first().solde == 1000.0
+
+
+def test_unpaid_recharge_is_not_credited(db):
+    t = _recharge(db, "r1", timedelta(minutes=2))
+    assert _run_recharges(db, lambda i: False) == 0
+    db.refresh(t)
+    assert t.statut == "en_attente"
+    assert db.query(models.User).first().solde == 0.0
+
+
+def test_withdrawals_and_other_transactions_are_never_touched(db):
+    _recharge(db, "w1", timedelta(minutes=2), type_="retrait")
+    _recharge(db, "v1", timedelta(minutes=2), type_="vente")
+    calls = []
+    def paygate(i):
+        calls.append(i)
+        return True
+    assert _run_recharges(db, paygate) == 0
+    assert calls == []
+    assert db.query(models.User).first().solde == 0.0
+
+
+def test_recharge_too_recent_or_too_old_is_ignored(db):
+    _recharge(db, "new", timedelta(seconds=5))
+    _recharge(db, "old", timedelta(hours=7))
+    assert _run_recharges(db, lambda i: True) == 0
+    assert db.query(models.User).first().solde == 0.0
+
+
+def test_webhook_and_rattrapage_credit_only_once(db):
+    """Le webhook et le rattrapage utilisent la même fonction : le 2e appel ne crédite pas."""
+    from app.routers.wallet import _confirm_recharge
+    t = _recharge(db, "r1", timedelta(minutes=2))
+    assert _confirm_recharge(db, t) is True
+    assert _confirm_recharge(db, t) is False
+    assert db.query(models.User).first().solde == 1000.0
+
+
+def test_paygate_error_on_one_recharge_does_not_block_the_others(db):
+    _recharge(db, "boom", timedelta(minutes=3))
+    good = _recharge(db, "ok", timedelta(minutes=2), montant=500.0)
+    def paygate(i):
+        if i == "boom":
+            raise RuntimeError("PayGate injoignable")
+        return True
+    assert _run_recharges(db, paygate) == 1
+    db.refresh(good)
+    assert good.statut == "confirme"
+    assert db.query(models.User).first().solde == 500.0

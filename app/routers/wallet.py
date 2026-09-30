@@ -211,6 +211,39 @@ async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchas
     purchase.voucher_id = voucher.id
     db.commit()
 
+def _confirm_recharge(db: Session, transaction: models.Transaction) -> bool:
+    """Crédite le portefeuille d'une recharge payée. Retourne False si la recharge a déjà
+    été traitée (ou si ce n'est pas une recharge) : le crédit n'est alors pas refait.
+
+    Le passage « en_attente » -> « confirme » et le crédit du solde sont enregistrés en une
+    seule fois : soit les deux réussissent, soit aucun (pas de recharge marquée payée sans
+    crédit). Utilisée par le webhook PayGate ET par le rattrapage (app/reconcile.py)."""
+    if transaction.type != "recharge":
+        return False
+
+    rows_updated = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.id == transaction.id, models.Transaction.statut == "en_attente")
+        .update({"statut": "confirme"}, synchronize_session=False)
+    )
+    if rows_updated == 0:
+        db.rollback()
+        return False  # déjà traitée par un autre appel concurrent
+
+    user = (
+        db.query(models.User)
+        .filter(models.User.id == transaction.user_id)
+        .with_for_update()
+        .first()
+    )
+    if user is None:
+        db.rollback()
+        logger.error("Utilisateur introuvable pour la recharge %s : aucun crédit effectué", transaction.identifier)
+        return False
+
+    user.solde = (user.solde or 0.0) + transaction.montant
+    db.commit()
+    return True
 
 @router.post("/webhook/paygate")
 @limiter.limit("30/minute")
@@ -248,25 +281,8 @@ async def paygate_webhook(request: Request, payload: dict, db: Session = Depends
         await _confirm_hotspot_purchase(db, purchase)
         return {"status": "ok"}
 
-    # Mise à jour atomique : ne réussit que si le statut est encore "en_attente".
-    # Empêche un double crédit si deux appels webhook arrivent en même temps.
-    rows_updated = (
-        db.query(models.Transaction)
-        .filter(
-            models.Transaction.identifier == identifier,
-            models.Transaction.statut != "confirme",
-        )
-        .update({"statut": "confirme"}, synchronize_session=False)
-    )
-    db.commit()
-
-    if rows_updated == 0:
-        # Une autre requête a déjà traité cette transaction entre-temps.
+    if not _confirm_recharge(db, transaction):
         return {"status": "already_processed"}
-
-    user = db.query(models.User).filter(models.User.id == transaction.user_id).first()
-    user.solde += transaction.montant
-    db.commit()
 
     return {"status": "ok"}
 
