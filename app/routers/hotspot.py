@@ -16,6 +16,7 @@ from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
 from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, render_login_page, DEFAULT_RATE_LIMIT
 from app.sync import sync_router
+from app.wireguard import is_router_active
 
 logger = logging.getLogger("miabewifi.hotspot")
 
@@ -38,6 +39,20 @@ def _get_authorized_router(router_id: int, db: Session, current_user: models.Use
         raise HTTPException(status_code=400, detail="Identifiants API MikroTik non configurés pour ce routeur.")
 
     return db_router
+
+
+def _require_active_router(db_router: models.Router) -> None:
+    """Refuse l'action si l'essai est terminé et qu'aucun abonnement n'est actif.
+    Ne sert que pour la création de nouveaux tickets : le client peut toujours consulter,
+    supprimer, vendre son stock existant et activer un pack pour se débloquer."""
+    if not is_router_active(db_router):
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Essai terminé ou abonnement expiré : activez un pack depuis l'onglet Routeurs "
+                "pour générer de nouveaux tickets. Vos tickets déjà créés continuent de fonctionner."
+            ),
+        )
 
 
 def _client_for(db_router: models.Router) -> RouterOSClient:
@@ -248,6 +263,7 @@ async def create_voucher_batch(
     """Génère un lot de tickets. Tout ou rien : si un seul ticket ne peut pas être créé
     sur le routeur, ceux déjà créés sont supprimés et rien n'est enregistré."""
     db_router = _get_authorized_router(router_id, db, current_user)
+    _require_active_router(db_router)
 
     async with _client_for(db_router) as client:
         # Le forfait doit exister sur le routeur ; sa durée devient la limite de

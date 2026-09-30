@@ -25,6 +25,7 @@ from app import models, schemas
 from app.config import PAYGATE_AUTH_TOKEN
 from app.database import get_db
 from app.ros_utils import format_duration_fr, parse_ros_duration
+from app.wireguard import is_router_active
 
 logger = logging.getLogger("miabewifi.hotspot_public")
 
@@ -77,6 +78,8 @@ def _batch_label(batch: models.VoucherBatch) -> str:
 def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
     """Forfaits achetables : un par (forfait, prix, durée), uniquement s'il reste des tickets."""
     db_router = _get_router_by_token(token, db)
+    if not is_router_active(db_router):
+        return []  # vente en ligne suspendue : la page affiche « Aucun forfait disponible »
 
     stock_rows = (
         db.query(models.Voucher.batch_id, func.count(models.Voucher.id))
@@ -120,6 +123,13 @@ async def start_payment(
     db: Session = Depends(get_db),
 ):
     db_router = _get_router_by_token(token, db)
+    # Seul le LANCEMENT d'un nouveau paiement est bloqué. Un client qui a déjà payé juste avant
+    # l'expiration reçoit quand même son ticket (webhook, statut, « J'ai déjà payé »).
+    if not is_router_active(db_router):
+        raise HTTPException(
+            status_code=403,
+            detail="La vente en ligne est momentanément indisponible sur ce Wi-Fi. Contactez l'agent sur place.",
+        )
 
     batch = (
         db.query(models.VoucherBatch)
