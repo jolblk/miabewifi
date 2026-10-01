@@ -85,11 +85,15 @@ export default function InstallWizard() {
         return () => clearTimeout(timeout);
     }, [step]);
 
-    // Juste après la connexion du tunnel, l'API du routeur peut mettre quelques
-    // secondes à répondre : on réessaie automatiquement avant d'afficher une erreur.
+    // Juste après la connexion du tunnel, le routeur peut encore être en train de générer
+    // son certificat de sécurité (jusqu'à plusieurs minutes selon le modèle) : l'API ne répond
+    // qu'ensuite. On réessaie donc patiemment (≈ 5 minutes) avant d'afficher une erreur.
+    const PROVISION_MAX_ATTEMPTS = 60;
+    const PROVISION_RETRY_DELAY_MS = 5000;
+
     async function runProvision(routerId) {
         setProvisionError('');
-        for (let attempt = 0; attempt < 5; attempt++) {
+        for (let attempt = 0; attempt < PROVISION_MAX_ATTEMPTS; attempt++) {
             try {
                 const res = await api.post(`/routers/${routerId}/provision`);
                 setProvisionInfo(res.data);
@@ -99,11 +103,11 @@ export default function InstallWizard() {
             } catch (err) {
                 const detail = err.response?.data?.detail;
                 // 400 = version RouterOS trop ancienne : inutile de réessayer.
-                if (err.response?.status === 400 || attempt === 4) {
+                if (err.response?.status === 400 || attempt === PROVISION_MAX_ATTEMPTS - 1) {
                     setProvisionError(detail || "Impossible de préparer le routeur. Réessaie dans un instant.");
                     return;
                 }
-                await new Promise((r) => setTimeout(r, 3000));
+                await new Promise((r) => setTimeout(r, PROVISION_RETRY_DELAY_MS));
             }
         }
     }
@@ -281,7 +285,11 @@ export default function InstallWizard() {
                     <p className="wizard-hint">
                         Copie ensuite ce script et colle-le dans ce terminal :
                     </p>
-                                        {mode === 'new' && (
+                    <p className="wizard-hint wizard-hint-small">
+                        Après le collage, le routeur peut mettre jusqu'à 5 minutes à terminer (génération du
+                        certificat de sécurité). Ne tape rien dans le terminal tant que le curseur n'est pas revenu.
+                    </p>
+                    {mode === 'new' && (
                         <p className="wizard-hint wizard-hint-small">
                             À la fin, la page du routeur peut se couper ou se recharger : c'est normal, le HotSpot vient d'être activé.
                         </p>
@@ -327,6 +335,10 @@ export default function InstallWizard() {
                             <Loader2 className="wizard-spinner" size={48} />
                             <h1>Routeur connecté</h1>
                             <p className="wizard-hint">Préparation de ton HotSpot en cours...</p>
+                            <p className="wizard-hint wizard-hint-small">
+                                Le routeur génère son certificat de sécurité : cela peut prendre jusqu'à 5 minutes
+                                selon le modèle. Ne ferme pas cette page.
+                            </p>
                         </>
                     ) : (
                         <>

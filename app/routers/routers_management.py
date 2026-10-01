@@ -555,6 +555,7 @@ async def setup_hotspot(
                 "interface": data.interface,
                 "address-pool": "none",
                 "profile": "miabewifi-hsprof",
+                "disabled": "no",
             })
             return await _prepare_hotspot(client, db_router, version)
     except HTTPException:

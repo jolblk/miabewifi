@@ -91,3 +91,31 @@ def test_new_router_script_has_wifi_ratelimit_prereqs():
     existing = m.build_config_script(mode="existing", private_key="PK", wireguard_ip="10.10.0.5", api_password="pw")
     assert "/interface wifi" not in existing and "fasttrack" not in existing
     assert all("rate-limit" in p for p in m.DEFAULT_TICKET_PROFILES)
+
+
+def test_script_builds_signed_ca_chain_and_waits_for_signing():
+    from app import mikrotik_scripts as m
+
+    for mode in ("new", "existing"):
+        script = m.build_config_script(mode=mode, private_key="PK", wireguard_ip="10.10.0.5", api_password="pw")
+        lines = script.splitlines()
+        i_ca = next(i for i, l in enumerate(lines) if "/certificate sign miabewifi-ca" in l)
+        i_leaf = next(i for i, l in enumerate(lines) if "/certificate sign miabewifi-cert ca=miabewifi-ca" in l)
+        i_svc = next(i for i, l in enumerate(lines) if "/ip service set www-ssl" in l or "/ip service get" in l)
+        # la CA est signée avant le certificat serveur, lui-même avant l'activation de www-ssl
+        assert i_ca < i_leaf < i_svc
+        # chaque signature attend la fin réelle de l'opération (pas de délai fixe)
+        assert all(":while" in lines[i] and "fingerprint" in lines[i] for i in (i_ca, i_leaf))
+        assert "key-usage=key-cert-sign,crl-sign" in script
+        # chaque ligne reste autonome : aucune variable partagée entre deux lignes
+        assert all(l.count(":local") == l.count(":local n 0") for l in lines)
+
+
+def test_new_router_script_enables_existing_disabled_hotspot_before_creating():
+    from app import mikrotik_scripts as m
+
+    script = m.build_config_script(mode="new", private_key="PK", wireguard_ip="10.10.0.5", api_password="pw")
+    lines = script.splitlines()
+    i_enable = next(i for i, l in enumerate(lines) if l.startswith(":do { /ip hotspot enable"))
+    assert i_enable < len(lines) - 1
+    assert "disabled=no" in lines[-1]

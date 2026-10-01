@@ -107,9 +107,36 @@ _FIREWALL = """\
 :if ([:len [/ip firewall filter find]] > 1) do={ /ip firewall filter move [/ip firewall filter find comment="miabewifi-api"] destination=0 }
 """
 
-_CERTIFICATE = """\
-:if ([:len [/certificate find name=miabewifi-cert]] = 0) do={ /certificate add name=miabewifi-cert common-name=miabewifi days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server; /certificate sign miabewifi-cert; :delay 5s }
-"""
+# Certificat HTTPS du routeur (utilisé par l'API REST sur www-ssl).
+# Méthode classique RouterOS : une petite autorité locale (CA) signe le certificat du serveur.
+# La signature prend de quelques secondes à plusieurs minutes selon le modèle : au lieu d'un
+# délai fixe, chaque étape attend (jusqu'à CERT_SIGN_TIMEOUT_S secondes) que le certificat
+# soit réellement signé (empreinte présente) avant de passer à la suivante.
+# Chaque ligne est autonome (le terminal RouterOS ne garde pas les variables d'une ligne
+# à l'autre) et peut être rejouée sans rien casser : ce qui est déjà signé est laissé tel quel.
+CERT_SIGN_TIMEOUT_S = 300
+
+
+def _cert_signed(name: str) -> str:
+    return f'[:len [/certificate find where name={name} fingerprint~"."]]'
+
+
+def _cert_sign_line(name: str, ca: str | None = None) -> str:
+    sign = f"/certificate sign {name}" + (f" ca={ca}" if ca else "")
+    return (
+        f":if ({_cert_signed(name)} = 0) do={{ {sign}; :local n 0; "
+        f":while ({_cert_signed(name)} = 0 && $n < {CERT_SIGN_TIMEOUT_S}) do={{ :delay 1s; :set n ($n + 1) }} }}\n"
+    )
+
+
+_CERTIFICATE = (
+    ":if ([:len [/certificate find name=miabewifi-ca]] = 0) do={ /certificate add name=miabewifi-ca "
+    "common-name=miabewifi-ca days-valid=3650 key-usage=key-cert-sign,crl-sign }\n"
+    + _cert_sign_line("miabewifi-ca")
+    + ":if ([:len [/certificate find name=miabewifi-cert]] = 0) do={ /certificate add name=miabewifi-cert "
+    "common-name=miabewifi days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server }\n"
+    + _cert_sign_line("miabewifi-cert", ca="miabewifi-ca")
+)
 
 # Routeur vierge : on active www-ssl et on le limite au VPS.
 _SERVICE_NEW = """\
@@ -162,7 +189,10 @@ _WIFI_NEW = """\
 :do { /interface wireless set [find] mode=ap-bridge ssid="__SSID__" security-profile=default disabled=no } on-error={}
 """
 
+# Si le HotSpot existe déjà mais est désactivé, on l'active d'abord ; sinon on le crée (activé).
+# La ligne de création reste la dernière du script.
 _HOTSPOT_ENABLE = """\
+:do { /ip hotspot enable [find name=miabewifi-hotspot] } on-error={}
 :if ([:len [/ip hotspot profile find name=miabewifi-hsprof]] = 0) do={ /ip hotspot profile add name=miabewifi-hsprof hotspot-address=192.168.88.1 login-by=cookie,http-chap,http-pap }
 :if ([:len [/ip hotspot find name=miabewifi-hotspot]] = 0) do={ /ip hotspot add name=miabewifi-hotspot interface=bridge address-pool=none profile=miabewifi-hsprof disabled=no }
 """
