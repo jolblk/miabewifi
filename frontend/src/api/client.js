@@ -17,10 +17,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        // Un 401 sur /auth/login signifie « identifiants incorrects » : on laisse
+        // la page de login afficher l'erreur au lieu de recharger la page.
+        const isLoginRequest = error.config?.url?.includes('/auth/login');
+        if (error.response?.status === 401 && !isLoginRequest) {
             localStorage.removeItem('miabewifi_token');
             sessionStorage.removeItem('miabewifi_token');
-            window.location.href = '/login';
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
         }
         return Promise.reject(error);
     }
