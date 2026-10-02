@@ -77,6 +77,10 @@ def health_check():
 
 app.mount("/assets", StaticFiles(directory="app/static/dist/assets"), name="assets")
 
+@app.get("/favicon.svg", include_in_schema=False)
+def serve_favicon():
+    return FileResponse("app/static/dist/favicon.svg", media_type="image/svg+xml")
+
 @app.get("/{full_path:path}")
 def serve_react(full_path: str):
     return FileResponse("app/static/dist/index.html")
