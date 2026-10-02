@@ -13,8 +13,8 @@ export const mobileNavItems = [
     { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
     { to: '/routers', label: 'Routeurs', icon: Radio },
     { to: '/wallet', label: 'Portefeuille', icon: Wallet },
-    { to: '/account', label: 'Mon compte', icon: UserCircle },
     { to: '/hotspot/suivi', label: 'Suivi HotSpot', icon: Activity },
+    { to: '/account', label: 'Mon compte', icon: UserCircle },
 ];
 
 export const adminNavItems = [
