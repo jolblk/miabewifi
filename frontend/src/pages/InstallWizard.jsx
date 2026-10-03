@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Loader2, Wifi, PartyPopper } from 'lucide-react';
 import api from '../api/client';
+import { confirmDialog } from '../utils/confirm';
 import './InstallWizard.css';
 
 const STEP_LABELS = {
@@ -164,7 +165,7 @@ export default function InstallWizard() {
 
     async function handleSetupHotspot() {
         if (!lanInterface) return;
-        if (!window.confirm(`Créer un HotSpot sur « ${lanInterface} » ? Tous les appareils connectés à cette interface devront saisir un ticket pour accéder à Internet.`)) return;
+        if (!(await confirmDialog(`Créer un HotSpot sur « ${lanInterface} » ? Tous les appareils connectés à cette interface devront saisir un ticket pour accéder à Internet.`, { confirmLabel: 'Créer' }))) return;
         setBusy(true);
         setError('');
         try {

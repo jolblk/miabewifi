@@ -21,6 +21,18 @@
     color: var(--text-muted);
 }
 
+.bottom-nav-item span {
+    max-width: 100%;
+    padding: 0 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bottom-nav-item {
+    min-width: 0;
+}
+
 .bottom-nav-item.active {
     color: var(--violet);
 }

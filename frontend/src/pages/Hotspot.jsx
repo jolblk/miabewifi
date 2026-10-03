@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X, Pencil } from 'lucide-react';
 import { useHotspotData } from '../hooks/useHotspotData';
+import { confirmDialog } from '../utils/confirm';
 import './Hotspot.css';
 
 // Un ticket peut cumuler plusieurs états : vendu, utilisé (le client s'est connecté), expiré.
@@ -157,7 +158,7 @@ export default function Hotspot() {
     }
 
     async function handleDeleteVoucher(voucherId) {
-        if (!window.confirm('Supprimer ce ticket ? Cette action est définitive.')) return;
+        if (!(await confirmDialog('Supprimer ce ticket ? Cette action est définitive.', { confirmLabel: 'Supprimer', danger: true }))) return;
         setBusy(true);
         setActionError('');
         try {
@@ -170,7 +171,7 @@ export default function Hotspot() {
     }
 
     async function handleDeleteBatch(batchId) {
-        if (!window.confirm("Supprimer ce lot ? Les tickets déjà vendus seront conservés, les autres seront définitivement supprimés.")) return;
+        if (!(await confirmDialog("Supprimer ce lot ? Les tickets déjà vendus seront conservés, les autres seront définitivement supprimés.", { confirmLabel: 'Supprimer', danger: true }))) return;
         setBusy(true);
         setActionError('');
         setActionInfo('');
@@ -246,7 +247,7 @@ export default function Hotspot() {
     }
 
     async function handleDeleteProfile(profile) {
-        if (!window.confirm(`Supprimer le forfait "${profile.name}" ? Les tickets déjà générés avec ce forfait continueront de fonctionner.`)) return;
+        if (!(await confirmDialog(`Supprimer le forfait "${profile.name}" ? Les tickets déjà générés avec ce forfait continueront de fonctionner.`, { confirmLabel: 'Supprimer', danger: true }))) return;
         setBusy(true);
         setActionError('');
         try {
@@ -355,7 +356,7 @@ export default function Hotspot() {
     }
 
     async function handleInstallLoginPage() {
-        if (!window.confirm("Installer la page de connexion simplifiée (un seul champ : le code) ? Elle remplace la page de connexion actuelle de votre HotSpot.")) return;
+        if (!(await confirmDialog("Installer la page de connexion simplifiée (un seul champ : le code) ? Elle remplace la page de connexion actuelle de votre HotSpot.", { confirmLabel: 'Installer' }))) return;
         setBusy(true);
         setActionError('');
         setActionInfo('');

@@ -5,15 +5,18 @@ import BottomNav from '../components/nav/BottomNav';
 import Sidebar from '../components/nav/Sidebar';
 import NotificationsBell from '../components/NotificationsBell';
 import SearchBar from '../components/SearchBar';
+import { confirmDialog } from '../utils/confirm';
 
 export default function AppLayout() {
     const { isMobile } = useViewport();
     const { user, loading, isAdmin, logout } = useAuth();
 
-    function handleLogout() {
-        if (window.confirm('Voulez-vous vraiment vous déconnecter ?')) {
-            logout();
-        }
+    async function handleLogout() {
+        const ok = await confirmDialog('Voulez-vous vraiment vous déconnecter ?', {
+            confirmLabel: 'Se déconnecter',
+            danger: true,
+        });
+        if (ok) logout();
     }
 
     if (loading) return null;

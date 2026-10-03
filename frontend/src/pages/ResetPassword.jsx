@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 import './Login.css';
 
 export default function ResetPassword() {
@@ -36,7 +37,7 @@ export default function ResetPassword() {
             await api.post('/auth/reset-password', { token, new_password: password });
             setSuccess(true);
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible de réinitialiser le mot de passe.");
+            setError(getErrorMessage(err, "Impossible de réinitialiser le mot de passe."));
         } finally {
             setLoading(false);
         }

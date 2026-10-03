@@ -5,6 +5,7 @@ import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
 import { stripAccents } from '../utils/normalizeText';
 import Hotspot from './Hotspot';
+import { confirmDialog } from '../utils/confirm';
 import './Routers.css';
 
 const ROUTERS_TABS = [
@@ -72,7 +73,7 @@ export default function Routers() {
     }
 
     async function handleDelete(routerId) {
-        if (!window.confirm('Supprimer ce routeur ? Cette action est définitive.')) return;
+        if (!(await confirmDialog('Supprimer ce routeur ? Cette action est définitive.', { confirmLabel: 'Supprimer', danger: true }))) return;
         setBusy(true);
         setActionError('');
         setMenuOpenId(null);

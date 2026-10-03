@@ -165,24 +165,6 @@ index 4baca8b..68e7750 100644
      color: var(--violet);
  }
 \ No newline at end of file
-diff --git a/frontend/src/components/nav/navItems.js b/frontend/src/components/nav/navItems.js
-index 90f46b8..6dff8ef 100644
---- a/frontend/src/components/nav/navItems.js
-+++ b/frontend/src/components/nav/navItems.js
-@@ -10,11 +10,11 @@ export const mainNavItems = [
- ];
- 
- export const mobileNavItems = [
--    { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
-+    { to: '/', label: 'Accueil', icon: LayoutDashboard },
-     { to: '/routers', label: 'Routeurs', icon: Radio },
-     { to: '/wallet', label: 'Portefeuille', icon: Wallet },
-     { to: '/account', label: 'Mon compte', icon: UserCircle },
--    { to: '/hotspot/suivi', label: 'Suivi HotSpot', icon: Activity },
-+    { to: '/hotspot/suivi', label: 'Suivi', icon: Activity },
- ];
- 
- export const adminNavItems = [
 diff --git a/frontend/src/hooks/useViewport.js b/frontend/src/hooks/useViewport.js
 index edccdc0..8a9aac9 100644
 --- a/frontend/src/hooks/useViewport.js

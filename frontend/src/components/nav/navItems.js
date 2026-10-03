@@ -10,10 +10,10 @@ export const mainNavItems = [
 ];
 
 export const mobileNavItems = [
-    { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
+    { to: '/', label: 'Accueil', icon: LayoutDashboard },
     { to: '/routers', label: 'Routeurs', icon: Radio },
     { to: '/wallet', label: 'Portefeuille', icon: Wallet },
-    { to: '/hotspot/suivi', label: 'Suivi HotSpot', icon: Activity },
+    { to: '/hotspot/suivi', label: 'Suivi', icon: Activity },
     { to: '/account', label: 'Mon compte', icon: UserCircle },
 ];
 

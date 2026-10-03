@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 import './Login.css';
 
 export default function Register() {
@@ -31,9 +32,25 @@ export default function Register() {
         try {
             await api.post('/auth/register', { nom, email, password });
             window.umami?.track('signup_completed');
-            setSuccess(true);
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible de créer le compte.");
+            setError(getErrorMessage(err, "Impossible de créer le compte."));
+            setLoading(false);
+            return;
+        }
+
+        // Compte créé : on tente de connecter directement l'utilisateur.
+        try {
+            const body = new URLSearchParams();
+            body.set('username', email);
+            body.set('password', password);
+            const res = await api.post('/auth/login', body, {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            });
+            localStorage.setItem('miabewifi_token', res.data.access_token);
+            navigate('/', { replace: true });
+        } catch {
+            // Échec de la connexion automatique : écran « Compte créé » classique.
+            setSuccess(true);
         } finally {
             setLoading(false);
         }
@@ -45,7 +62,7 @@ export default function Register() {
                 <div className="login-box">
                     <div className="login-brand">Compte créé</div>
                     <p className="login-sub">Vous pouvez maintenant vous connecter.</p>
-                    <button className="login-submit" onClick={() => navigate('/login')}>
+                    <button className="login-submit" onClick={() => navigate('/login', { state: { email } })}>
                         Aller à la connexion
                     </button>
                 </div>

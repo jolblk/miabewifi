@@ -19,6 +19,7 @@ import AdminRouters from './pages/admin/AdminRouters';
 import AdminTransactions from './pages/admin/AdminTransactions';
 import AdminLayout from './layouts/AdminLayout';
 import { SearchProvider } from './context/SearchContext';
+import ConfirmHost from './components/ConfirmHost';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        <ConfirmHost />
       </SearchProvider>
     </BrowserRouter>
   );

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import api from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 import './Login.css';
 
 export default function Login() {
-    const [email, setEmail] = useState('');
+    const location = useLocation();
+    const [email, setEmail] = useState(location.state?.email || '');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [remember, setRemember] = useState(true);
@@ -28,7 +30,7 @@ export default function Login() {
             storage.setItem('miabewifi_token', res.data.access_token);
             navigate('/', { replace: true });
         } catch (err) {
-            setError(err.response?.data?.detail || 'Connexion impossible.');
+            setError(getErrorMessage(err, 'Connexion impossible.'));
         } finally {
             setLoading(false);
         }
@@ -72,7 +74,7 @@ export default function Login() {
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
-                    <p className="forgot-link"><a href="/forgot-password">Mot de passe oublié ?</a></p>
+                    <p className="forgot-link"><Link to="/forgot-password">Mot de passe oublié ?</Link></p>
                 </div>
 
                 <label className="login-remember">
@@ -85,7 +87,7 @@ export default function Login() {
                 </button>
 
                 <p className="forgot-link" style={{ textAlign: 'center', marginTop: 16 }}>
-                    Pas encore de compte ? <a href="/register">Créer un compte</a>
+                    Pas encore de compte ? <Link to="/register">Créer un compte</Link>
                 </p>
             </form>
         </div>
