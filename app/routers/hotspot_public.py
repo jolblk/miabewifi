@@ -65,6 +65,23 @@ def _normalize_phone(phone: str) -> str:
     return digits
 
 
+
+def _normalize_mac(mac: str | None) -> str | None:
+    """Adresse MAC au format unique AA:BB:CC:DD:EE:FF (ou None si absente)."""
+    if not mac:
+        return None
+    return mac.strip().upper().replace("-", ":")
+
+
+# « J'ai déjà payé » ne retrouve que les achats récents : c'est fait pour le client dont la
+# page s'est fermée avant l'affichage du code, pas pour consulter d'anciens tickets.
+RETRIEVE_WINDOW = timedelta(hours=24)
+
+RETRIEVE_NOT_FOUND = (
+    "Aucun ticket récent trouvé pour ce numéro sur cet appareil. Utilisez le téléphone qui a "
+    "servi au paiement, ou demandez votre code à l'agent sur place."
+)
+
 def _batch_label(batch: models.VoucherBatch) -> str:
     if batch.limit_uptime:
         return format_duration_fr(parse_ros_duration(batch.limit_uptime))
@@ -165,6 +182,7 @@ async def start_payment(
         methode=data.methode,
         statut="en_attente",
         identifier=identifier,
+        client_mac=_normalize_mac(data.mac),
     )
     db.add(purchase)
     db.commit()
@@ -227,18 +245,30 @@ def retrieve_code(
     data: schemas.PublicHotspotRetrieveRequest,
     db: Session = Depends(get_db),
 ):
+
     """Redonne le code du dernier ticket payé avec ce numéro sur ce routeur
-    (client dont la page s'est fermée avant l'affichage du code)."""
+    (client dont la page s'est fermée avant l'affichage du code).
+
+    Sécurité : le numéro de téléphone seul ne suffit pas (n'importe qui peut connaître le
+    numéro d'un voisin). Il faut AUSSI l'adresse MAC de l'appareil qui a payé, que la page
+    HotSpot envoie automatiquement, et l'achat doit dater de moins de 24 h."""
     db_router = _get_router_by_token(token, db)
     telephone = _normalize_phone(data.telephone)
+    mac = _normalize_mac(data.mac)
+    if not mac:
+        # Ancienne page de connexion (sans adresse MAC) ou page ouverte hors du HotSpot.
+        raise HTTPException(status_code=404, detail=RETRIEVE_NOT_FOUND)
 
+    since = datetime.utcnow() - RETRIEVE_WINDOW
     row = (
         db.query(models.HotspotPurchase, models.Voucher)
         .join(models.Voucher, models.HotspotPurchase.voucher_id == models.Voucher.id)
         .filter(
             models.HotspotPurchase.router_id == db_router.id,
             models.HotspotPurchase.telephone == telephone,
+            models.HotspotPurchase.client_mac == mac,
             models.HotspotPurchase.statut == "confirme",
+            models.HotspotPurchase.created_at >= since,
             models.Voucher.statut != "EXPIRED",
         )
         .order_by(models.HotspotPurchase.created_at.desc())
@@ -252,6 +282,7 @@ def retrieve_code(
         .filter(
             models.HotspotPurchase.router_id == db_router.id,
             models.HotspotPurchase.telephone == telephone,
+            models.HotspotPurchase.client_mac == mac,
             models.HotspotPurchase.statut.in_(_PENDING_STATUSES),
             models.HotspotPurchase.created_at >= datetime.utcnow() - timedelta(minutes=15),
         )
@@ -259,4 +290,4 @@ def retrieve_code(
     )
     if recent_pending:
         raise HTTPException(status_code=404, detail="Paiement en cours de confirmation, réessayez dans un instant.")
-    raise HTTPException(status_code=404, detail="Aucun ticket valide trouvé pour ce numéro.")
+    raise HTTPException(status_code=404, detail=RETRIEVE_NOT_FOUND)

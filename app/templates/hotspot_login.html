@@ -108,6 +108,9 @@ $(endif)
 <script>
 var API_BASE = "__API_BASE__";
 var PUBLIC_TOKEN = "__PUBLIC_TOKEN__";
+// Adresse MAC de cet appareil, fournie par le MikroTik. Sert à prouver que c'est bien
+// l'appareil qui a payé quand on redemande son code (« J'ai déjà payé »).
+var CLIENT_MAC = /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test("$(mac)") ? "$(mac)" : null;
 var HAS_CHAP = document.forms["sendin"] !== undefined;
 var selectedBatchId = null;
 var selectedNetwork = null;
@@ -203,7 +206,7 @@ function startPayment() {
   fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/pay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ batch_id: selectedBatchId, telephone: phone, methode: selectedNetwork }),
+    body: JSON.stringify({ batch_id: selectedBatchId, telephone: phone, methode: selectedNetwork, mac: CLIENT_MAC }),
   })
     .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
     .then(function (res) {
@@ -265,7 +268,7 @@ function doRetrieve() {
   fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/retrieve", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ telephone: phone }),
+    body: JSON.stringify({ telephone: phone, mac: CLIENT_MAC }),
   })
     .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
     .then(function (res) {

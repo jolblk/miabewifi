@@ -234,5 +234,17 @@ class PublicHotspotPayRequest(BaseModel):
     methode: Literal["FLOOZ", "TMONEY"]
 
 
+# Adresse MAC envoyée par la page HotSpot (variable $(mac) du MikroTik), ex: AA:BB:CC:DD:EE:FF
+MAC_PATTERN = r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
+
+
+class PublicHotspotPayRequest(BaseModel):
+    batch_id: int
+    telephone: str = Field(pattern=r"^\+?\d{8,15}$")
+    methode: Literal["FLOOZ", "TMONEY"]
+    mac: Optional[str] = Field(default=None, pattern=MAC_PATTERN)
+
+
 class PublicHotspotRetrieveRequest(BaseModel):
     telephone: str = Field(pattern=r"^\+?\d{8,15}$")
+    mac: Optional[str] = Field(default=None, pattern=MAC_PATTERN)

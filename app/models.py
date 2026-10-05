@@ -135,6 +135,7 @@ class HotspotPurchase(Base):
     identifier = Column(String, unique=True, nullable=False)
     voucher_id = Column(Integer, ForeignKey("vouchers.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    client_mac = Column(String, nullable=True)  # adresse MAC de l'appareil qui a payé (pour « J'ai déjà payé »)
 
 
 class RevokedToken(Base):

@@ -51,7 +51,7 @@ models = types.ModuleType("app.models")
 models.Router = make_model("Router", ["id", "owner_id", "public_token"])
 models.VoucherBatch = make_model("VoucherBatch", ["id", "router_id", "prix_unitaire", "created_at", "online_sale"])
 models.Voucher = make_model("Voucher", ["id", "batch_id", "statut", "code"])
-models.HotspotPurchase = make_model("HotspotPurchase", ["id", "router_id", "identifier", "telephone", "statut", "created_at", "voucher_id"])
+models.HotspotPurchase = make_model("HotspotPurchase", ["id", "router_id", "identifier", "telephone", "statut", "created_at", "voucher_id", "client_mac"])
 models.User = make_model("User", ["id"])
 sys.modules["app.models"] = models
 
@@ -202,11 +202,22 @@ def test_public_payment_status_still_works_when_expired():
 def test_public_retrieve_code_not_blocked_when_expired():
     """« J'ai déjà payé » ne doit pas être bloqué : on doit passer l'accès au routeur sans 403/402."""
     db = FakeDB(router=router(EXPIRED))
-    data = SimpleNamespace(telephone="90112233")
+    data = SimpleNamespace(telephone="90112233", mac="AA:BB:CC:DD:EE:FF")
     try:
         public.retrieve_code(SimpleNamespace(), "tok", data, db)
     except HTTPException as e:
         assert e.status_code == 404 and "Aucun ticket" in e.detail   # « pas trouvé », pas « bloqué »
+
+
+
+def test_public_retrieve_code_refuses_without_mac():
+    """Le numéro seul ne suffit pas : sans l'adresse MAC de l'appareil, aucun code n'est rendu,
+    et la base n'est même pas consultée pour les achats."""
+    purchase = (SimpleNamespace(statut="confirme"), SimpleNamespace(code="VOLE1234"))
+    db = FakeDB(router=router(ACTIVE), purchase=purchase)
+    data = SimpleNamespace(telephone="90112233", mac=None)
+    assert raises(404, lambda: public.retrieve_code(SimpleNamespace(), "tok", data, db))
+    assert models.HotspotPurchase not in db.queried
 
 
 def test_public_offers_empty_when_owner_disabled_online_sales():
