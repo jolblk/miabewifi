@@ -11,10 +11,42 @@ from app import models, schemas
 from app.dependencies import get_current_user
 from app.config import PAYGATE_AUTH_TOKEN, HOTSPOT_SALE_FEE_RATE
 from app.fees import compute_sale_split
+from app.payouts import SUCCES, ECHEC, classify_disburse_response
+from app.alerts import alert_admins
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
 logger = logging.getLogger("miabewifi.wallet")
+
+# Délai d'attente des appels de décaissement PayGate. Le délai par défaut de httpx (5 s)
+# est trop court : un décaissement mobile money peut prendre plus longtemps.
+PAYGATE_DISBURSE_TIMEOUT = 30
+
+
+async def _paygate_disburse(payload: dict) -> str:
+    """Demande un décaissement à PayGate et renvoie SUCCES, ECHEC ou INCERTAIN
+    (voir app/payouts.py). Ne lève jamais d'exception."""
+    try:
+        async with httpx.AsyncClient(timeout=PAYGATE_DISBURSE_TIMEOUT) as client:
+            response = await client.post(
+                "https://paygateglobal.com/api/v1/disburse",
+                json={"auth_token": PAYGATE_AUTH_TOKEN, **payload},
+            )
+    except Exception:
+        logger.exception("Décaissement PayGate sans réponse (référence %s)", payload.get("reference"))
+        return classify_disburse_response(None, None)
+
+    try:
+        body = response.json()
+    except Exception:
+        body = None
+    outcome = classify_disburse_response(response.status_code, body)
+    if outcome != SUCCES:
+        logger.warning(
+            "Décaissement PayGate %s (référence %s) : HTTP %s, réponse %s",
+            outcome, payload.get("reference"), response.status_code, body,
+        )
+    return outcome
 
 @router.post("/recharger")
 async def recharger(
@@ -88,25 +120,21 @@ async def retirer(
     db.add(transaction)
     db.commit()
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://paygateglobal.com/api/v1/disburse",
-                json={
-                    "auth_token": PAYGATE_AUTH_TOKEN,
-                    "phone_number": data.phone_number,
-                    "amount": data.montant,
-                    "reason": f"Retrait MIABEWIFI - {current_user.email}",
-                    "reference": reference,
-                    "network": data.network,
-                },
-            )
-            result = response.json()
-    except Exception:
-        result = {"status": None}
+    outcome = await _paygate_disburse({
+        "phone_number": data.phone_number,
+        "amount": data.montant,
+        "reason": f"Retrait MIABEWIFI - {current_user.email}",
+        "reference": reference,
+        "network": data.network,
+    })
 
-    if result.get("status") != 200:
-        # Échec chez PayGate : on rembourse les fonds réservés et on marque l'échec.
+    if outcome == SUCCES:
+        transaction.statut = "confirme"
+        db.commit()
+        return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}
+
+    if outcome == ECHEC:
+        # PayGate a clairement refusé : l'argent n'est pas parti, on rembourse les fonds réservés.
         refund_user = (
             db.query(models.User)
             .filter(models.User.id == current_user.id)
@@ -118,13 +146,29 @@ async def retirer(
         db.commit()
         raise HTTPException(
             status_code=400,
-            detail=f"Le retrait a échoué auprès de l'opérateur (code {result.get('status')}).",
+            detail="Le retrait a été refusé par l'opérateur. Votre solde n'a pas été débité.",
         )
 
-    transaction.statut = "confirme"
+    # Résultat INCERTAIN (coupure, délai dépassé, réponse illisible) : l'argent est peut-être
+    # parti. On NE rembourse PAS (risque de double paiement) : les fonds restent réservés et un
+    # administrateur tranche après vérification dans le tableau de bord PayGate.
+    transaction.statut = "a_verifier"
     db.commit()
-
-    return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}
+    await alert_admins(
+        "⚠️ Retrait MIABEWIFI à vérifier\n\n"
+        f"Référence : {reference}\n"
+        f"Client : {current_user.nom} ({current_user.email})\n"
+        f"Montant : {data.montant} FCFA vers {data.phone_number} ({data.network})\n\n"
+        "PayGate n'a pas donné de réponse claire. Vérifiez cette référence dans le tableau de bord "
+        "PayGate, puis confirmez ou remboursez le retrait depuis l'admin (Transactions)."
+    )
+    return {
+        "message": (
+            "Votre retrait est en cours de vérification auprès de l'opérateur. "
+            "Ne refaites pas la demande : le montant reste réservé et vous serez fixé rapidement."
+        ),
+        "statut": "a_verifier",
+    }
 
 
 async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchase) -> None:
@@ -155,23 +199,28 @@ async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchas
     if voucher is None:
         purchase.statut = "en_rupture"
         db.commit()
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "https://paygateglobal.com/api/v1/disburse",
-                    json={
-                        "auth_token": PAYGATE_AUTH_TOKEN,
-                        "phone_number": purchase.telephone,
-                        "amount": purchase.montant,
-                        "reason": "Remboursement MIABEWIFI - ticket épuisé",
-                        "reference": f"{purchase.identifier}-remb",
-                        "network": purchase.methode,
-                    },
-                )
+        outcome = await _paygate_disburse({
+            "phone_number": purchase.telephone,
+            "amount": purchase.montant,
+            "reason": "Remboursement MIABEWIFI - ticket épuisé",
+            "reference": f"{purchase.identifier}-remb",
+            "network": purchase.methode,
+        })
+        if outcome == SUCCES:
             purchase.statut = "rembourse"
-        except Exception:
-            logger.error("Remboursement automatique impossible pour l'achat %s", purchase.identifier)
+        else:
+            # Refus OU résultat incertain : jamais de nouvelle tentative automatique (risque de
+            # double remboursement). Un administrateur vérifie dans PayGate et rembourse à la main.
             purchase.statut = "echoue_remboursement"
+            logger.error("Remboursement automatique non confirmé pour l'achat %s (%s)", purchase.identifier, outcome)
+            await alert_admins(
+                "⚠️ Remboursement de ticket à vérifier\n\n"
+                f"Référence : {purchase.identifier}-remb\n"
+                f"Montant : {purchase.montant} FCFA vers {purchase.telephone} ({purchase.methode})\n"
+                f"Résultat PayGate : {outcome}\n\n"
+                "Vérifiez dans le tableau de bord PayGate si le remboursement est parti ; sinon, "
+                "remboursez le client manuellement."
+            )
         db.commit()
         return
 

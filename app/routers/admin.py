@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -95,6 +95,82 @@ def list_all_transactions(db: Session = Depends(get_db), _admin=Depends(get_curr
             "methode": t.methode,
             "statut": t.statut,
             "type": t.type,
+            "identifier": t.identifier,
             "created_at": t.created_at,
         })
     return result
+
+
+# --- Retraits à vérifier -------------------------------------------------------------------
+# Un retrait passe en « a_verifier » quand PayGate n'a pas donné de réponse claire (coupure,
+# délai dépassé...) : l'argent est peut-être parti. Le montant reste réservé (déjà retiré du
+# solde) jusqu'à ce qu'un administrateur vérifie la référence dans le tableau de bord PayGate :
+#   - l'argent est bien arrivé  -> « confirmer » : rien ne bouge, le retrait est validé ;
+#   - l'argent n'est pas parti  -> « rembourser » : le montant est rendu au solde du client.
+
+
+@router.get("/retraits-a-verifier")
+def list_withdrawals_to_check(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+    rows = (
+        db.query(models.Transaction, models.User)
+        .join(models.User, models.Transaction.user_id == models.User.id)
+        .filter(models.Transaction.type == "retrait", models.Transaction.statut == "a_verifier")
+        .order_by(models.Transaction.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "identifier": t.identifier,
+            "montant": t.montant,
+            "methode": t.methode,
+            "user_nom": u.nom,
+            "user_email": u.email,
+            "created_at": t.created_at,
+        }
+        for t, u in rows
+    ]
+
+
+def _claim_withdrawal_to_check(db: Session, transaction_id: int, new_statut: str) -> models.Transaction:
+    """Passe un retrait de « a_verifier » à `new_statut` en une seule opération : si deux
+    administrateurs cliquent en même temps, un seul des deux clics est pris en compte."""
+    rows_updated = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.id == transaction_id,
+            models.Transaction.type == "retrait",
+            models.Transaction.statut == "a_verifier",
+        )
+        .update({"statut": new_statut}, synchronize_session=False)
+    )
+    if rows_updated == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ce retrait n'est plus à vérifier (déjà traité ?).")
+    return db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+
+
+@router.post("/retraits/{transaction_id}/confirmer")
+def confirm_withdrawal(transaction_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+    """L'argent est bien arrivé chez le client (vérifié dans PayGate) : le retrait est validé."""
+    _claim_withdrawal_to_check(db, transaction_id, "confirme")
+    db.commit()
+    return {"message": "Retrait confirmé."}
+
+
+@router.post("/retraits/{transaction_id}/rembourser")
+def refund_withdrawal(transaction_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+    """L'argent n'est PAS parti (vérifié dans PayGate) : le montant réservé est rendu au client."""
+    transaction = _claim_withdrawal_to_check(db, transaction_id, "echoue")
+    user = (
+        db.query(models.User)
+        .filter(models.User.id == transaction.user_id)
+        .with_for_update()
+        .first()
+    )
+    if user is None:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Client introuvable.")
+    user.solde = (user.solde or 0.0) + transaction.montant
+    db.commit()
+    return {"message": "Retrait annulé : le montant a été rendu au client."}

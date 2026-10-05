@@ -5,8 +5,8 @@ import './Wallet.css';
 import { formatAmount, formatDateTime } from '../utils/format';
 import { getErrorMessage } from '../utils/errorMessage';
 
-const statutLabel = { en_attente: 'En attente', confirme: 'Confirmé' };
-const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success' };
+const statutLabel = { en_attente: 'En attente', confirme: 'Confirmé', a_verifier: 'En vérification', echoue: 'Échoué' };
+const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success', a_verifier: 'badge-warning', echoue: 'badge-danger' };
 const typeLabel = { recharge: 'Recharge', vente: 'Vente de ticket', debit: 'Pack activé', retrait: 'Retrait' };
 const creditTypes = ['recharge', 'vente'];
 
