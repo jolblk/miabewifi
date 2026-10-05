@@ -9,12 +9,11 @@ from app.config import FRONTEND_URL
 from app.email_utils import send_reset_email
 from app.limiter import limiter
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentification"])
 
 
 @router.post("/register", response_model=schemas.UserOut)
-@limiter.limit("5/minute")
+@limiter.limit("5/minute;20/hour")
 
 def register(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
@@ -65,6 +64,7 @@ def logout(
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/minute;10/hour")
 def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
 
@@ -81,6 +81,7 @@ def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db
 
 
 @router.post("/reset-password")
+@limiter.limit("10/minute")
 def reset_password(request: Request, payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
     data = security.decode_reset_token(payload.token)
     if not data:

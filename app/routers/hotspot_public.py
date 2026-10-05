@@ -29,17 +29,7 @@ from app.wireguard import is_router_active
 
 logger = logging.getLogger("miabewifi.hotspot_public")
 
-
-def _client_ip(request: Request) -> str:
-    """IP du client derrière le reverse proxy : dernière entrée de X-Forwarded-For
-    (celle ajoutée par notre proxy, non falsifiable par le client)."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[-1].strip()
-    return request.client.host if request.client else "unknown"
-
-
-limiter = Limiter(key_func=_client_ip)
+from app.limiter import limiter
 router = APIRouter(prefix="/public/hotspot", tags=["HotSpot public"])
 
 # Statuts d'achat renvoyés tels quels au client ; "en_cours" (traitement interne) est

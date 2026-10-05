@@ -3,7 +3,7 @@
 """Vérification isolée (SANS base ni dépendances) : exécute la VRAIE fonction _confirm_hotspot_purchase de app/routers/wallet.py
 avec une fausse base de données (SQLAlchemy/FastAPI/httpx absents de ce bac à sable)."""
 import sys, types, asyncio, importlib
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 sys.path.insert(0, ".")
 
@@ -38,7 +38,7 @@ stub("slowapi.util", get_remote_address=lambda r: "x")
 stub("httpx", AsyncClient=MagicMock())
 stub("app.database", get_db=None)
 stub("app.dependencies", get_current_user=None)
-stub("app.config", PAYGATE_AUTH_TOKEN="tok", HOTSPOT_SALE_FEE_RATE="0.01")
+stub("app.config", PAYGATE_AUTH_TOKEN="tok", HOTSPOT_SALE_FEE_RATE="0.01", TELEGRAM_BOT_TOKEN=None, TELEGRAM_CHAT_ID=None)
 stub("app.schemas", RechargeRequest=object, WithdrawRequest=object)
 sys.modules["app.models"] = models
 import app; app.models = models
@@ -100,7 +100,12 @@ def test_out_of_stock_credits_nothing_and_refunds():
     owner = models.User(id=7, solde=100.0)
     db = FakeDB(voucher=None, owner=owner)
     p = purchase()
-    run(db, p)   # httpx est un faux : le remboursement "réussit"
+    # Faux PayGate qui accepte le remboursement (code 200)
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {"status": 200}
+    client = sys.modules["httpx"].AsyncClient.return_value.__aenter__.return_value
+    client.post = AsyncMock(return_value=resp)
+    run(db, p)
     assert owner.solde == 100.0
     assert not any(isinstance(o, (models.Sale, models.Transaction)) for o in db.added)
     assert p.statut == "rembourse"

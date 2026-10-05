@@ -19,8 +19,6 @@ from app.reconcile import reconcile_loop
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-limiter = Limiter(key_func=get_remote_address)
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Synchronise régulièrement les tickets avec les routeurs (connexions, expirations).

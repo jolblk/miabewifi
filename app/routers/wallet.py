@@ -14,7 +14,7 @@ from app.fees import compute_sale_split
 from app.payouts import SUCCES, ECHEC, classify_disburse_response
 from app.alerts import alert_admins
 
-limiter = Limiter(key_func=get_remote_address)
+from app.limiter import limiter
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
 logger = logging.getLogger("miabewifi.wallet")
 
@@ -49,7 +49,9 @@ async def _paygate_disburse(payload: dict) -> str:
     return outcome
 
 @router.post("/recharger")
+@limiter.limit("10/minute")
 async def recharger(
+    request: Request,
     data: schemas.RechargeRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -87,7 +89,9 @@ async def recharger(
 
 
 @router.post("/retirer")
+@limiter.limit("5/minute")
 async def retirer(
+    request: Request,
     data: schemas.WithdrawRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -295,7 +299,7 @@ def _confirm_recharge(db: Session, transaction: models.Transaction) -> bool:
     return True
 
 @router.post("/webhook/paygate")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def paygate_webhook(request: Request, payload: dict, db: Session = Depends(get_db)):
     identifier = payload.get("identifier")
     tx_reference = payload.get("tx_reference")
