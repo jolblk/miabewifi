@@ -14,6 +14,7 @@ class User(Base):
     solde = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     role = Column(String, default="client")  # "client" ou "admin"
+    trial_used = Column(Boolean, nullable=False, default=False, server_default=false())  # essai gratuit déjà accordé
 
     routers = relationship("Router", back_populates="owner")
 

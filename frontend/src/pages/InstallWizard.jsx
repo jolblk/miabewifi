@@ -29,6 +29,7 @@ export default function InstallWizard() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [router, setRouter] = useState(null);
+    const hasTrial = Boolean(router?.trial_expires_at && new Date(router.trial_expires_at) > new Date());
     const [script, setScript] = useState('');
     const [copied, setCopied] = useState(false);
     const [connected, setConnected] = useState(false);
@@ -405,7 +406,9 @@ export default function InstallWizard() {
                         </div>
                     )}
                     <p className="wizard-hint">
-                        Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.
+                        {hasTrial
+                            ? 'Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.'
+                            : "L'essai gratuit a déjà été utilisé sur ton compte : active un forfait pour générer et vendre des tickets."} — le forfait prend le relais après.
                     </p>
                     <div className="wizard-packs">
                         {packs.map((p) => (
@@ -422,7 +425,7 @@ export default function InstallWizard() {
                         ))}
                     </div>
                     <button className="btn-secondary wizard-later-btn" onClick={() => navigate('/routers')}>
-                        Plus tard — profiter de mon essai gratuit
+                        {hasTrial ? 'Plus tard — profiter de mon essai gratuit' : 'Plus tard'}
                     </button>
                 </div>
             )}

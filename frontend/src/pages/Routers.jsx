@@ -21,6 +21,7 @@ function statutRouteur(r) {
     const abo = r.subscription_expires_at && new Date(r.subscription_expires_at) > now;
     if (abo) return { label: 'Abonné', cls: 'badge-success' };
     if (trial) return { label: 'Essai', cls: 'badge-warning' };
+    if (!r.trial_expires_at && !r.subscription_expires_at) return { label: 'À activer', cls: 'badge-warning' };
     return { label: 'Expiré', cls: 'badge-danger' };
 }
 

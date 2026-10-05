@@ -39,6 +39,11 @@ def get_next_available_ip(db, models) -> str:
 
     raise ValueError("Plus d'adresses IP disponibles dans le sous-réseau.")
 
+def count_free_ips(db, models) -> int:
+    """Nombre d'adresses encore libres dans le sous-réseau du tunnel (.2 à .254)."""
+    used = {ip for (ip,) in db.query(models.Router.wireguard_ip).all() if ip}
+    return 253 - len(used)
+
 PORT_RANGES = {
     "winbox": (20000, 29999),
     "webfig": (30000, 39999),

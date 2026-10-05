@@ -10,6 +10,14 @@ from app import models, schemas, wireguard, wg_agent
 from app.dependencies import get_current_user
 from app.routeros_client import RouterOSClient
 from app import mikrotik_scripts
+from app.alerts import alert_admins_sync
+from app.router_policy import (
+    LOW_IP_ALERT_THRESHOLD,
+    MAX_UNPAID_ROUTERS,
+    TRIAL_DAYS,
+    RouterLimitReached,
+    decide_router_creation,
+)
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
 
@@ -20,8 +28,41 @@ def create_router(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    # Verrouille le compte le temps de la création : deux demandes envoyées en même temps ne
+    # peuvent pas obtenir deux essais gratuits ni dépasser ensemble la limite de routeurs.
+    owner = (
+        db.query(models.User)
+        .filter(models.User.id == current_user.id)
+        .with_for_update()
+        .first()
+    )
+    unpaid_routers = (
+        db.query(models.Router)
+        .filter(models.Router.owner_id == owner.id, models.Router.subscription_expires_at.is_(None))
+        .count()
+    )
+    try:
+        grant_trial = decide_router_creation(owner.role == "admin", owner.trial_used, unpaid_routers)
+    except RouterLimitReached:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Vous avez déjà {MAX_UNPAID_ROUTERS} routeurs sans forfait. Activez un forfait sur l'un "
+                "d'eux, ou supprimez celui que vous n'utilisez pas, avant d'en ajouter un autre."
+            ),
+        )
+
     private_key, public_key = wireguard.generate_keypair()
-    wireguard_ip = wireguard.get_next_available_ip(db, models)
+    try:
+        wireguard_ip = wireguard.get_next_available_ip(db, models)
+    except ValueError:
+        db.rollback()
+        alert_admins_sync("🚨 MIABEWIFI : plus aucune adresse WireGuard libre, les ajouts de routeurs sont bloqués.")
+        raise HTTPException(
+            status_code=503,
+            detail="La plateforme est momentanément complète. Contactez le support.",
+        )
     api_password = mikrotik_scripts.generate_api_password()
     # Le nom du Wi-Fi n'a de sens que pour un routeur configuré par MIABEWIFI ("new").
     wifi_ssid = (
@@ -37,7 +78,7 @@ def create_router(
         wireguard_ip=wireguard_ip,
         public_key=public_key,
         is_connected=False,
-        trial_expires_at=datetime.utcnow() + timedelta(days=3),
+        trial_expires_at=datetime.utcnow() + timedelta(days=TRIAL_DAYS) if grant_trial else None,
         setup_mode=router_data.mode,
         mikrotik_api_username=mikrotik_scripts.API_USERNAME,
         mikrotik_api_password=encrypt(api_password),
@@ -45,6 +86,8 @@ def create_router(
     )
 
     db.add(new_router)
+    if grant_trial:
+        owner.trial_used = True
     db.commit()
     db.refresh(new_router)
 
@@ -69,10 +112,18 @@ def create_router(
     except Exception as e:
         db.query(models.PortMapping).filter(models.PortMapping.router_id == new_router.id).delete()
         db.delete(new_router)
+        if grant_trial:
+            owner.trial_used = False  # le routeur n'a pas pu être créé : l'essai n'est pas consommé
         db.commit()
         raise HTTPException(
             status_code=502,
             detail=f"Impossible de préparer le serveur pour ce routeur : {e}",
+        )
+
+    free_ips = wireguard.count_free_ips(db, models)
+    if free_ips <= LOW_IP_ALERT_THRESHOLD:
+        alert_admins_sync(
+            f"⚠️ MIABEWIFI : il ne reste que {free_ips} adresse(s) WireGuard libre(s) pour de nouveaux routeurs."
         )
 
     config_script = mikrotik_scripts.build_config_script(
