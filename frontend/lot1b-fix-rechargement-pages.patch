@@ -1,0 +1,29 @@
+diff --git a/app/main.py b/app/main.py
+index 7ac152f..a101878 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -64,6 +64,24 @@ async def public_hotspot_cors(request: Request, call_next):
+         return response
+     return await call_next(request)
+ 
++# Quand on ouvre ou recharge une page dans le navigateur (en-tête « Accept: text/html »),
++# on renvoie toujours l'application React, même si l'adresse porte le même nom qu'une route
++# de l'API (ex. /routers/nouveau, /admin/users). Les appels de l'application (axios) ne
++# demandent pas du HTML : ils continuent de recevoir du JSON.
++SPA_EXCLUDED_PREFIXES = ("/public/", "/docs", "/redoc", "/openapi.json", "/health", "/assets/")
++
++
++@app.middleware("http")
++async def serve_react_to_browsers(request: Request, call_next):
++    if (
++        request.method in ("GET", "HEAD")
++        and "text/html" in request.headers.get("accept", "")
++        and not request.url.path.startswith(SPA_EXCLUDED_PREFIXES)
++    ):
++        return FileResponse("app/static/dist/index.html")
++    return await call_next(request)
++
++
+ app.include_router(auth.router)
+ app.include_router(routers_management.router)
+ app.include_router(wallet.router)
