@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
 import api from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function Support() {
     const [telephone, setTelephone] = useState('');
@@ -27,7 +28,7 @@ export default function Support() {
             setMessage('');
             setTelephone('');
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible d'envoyer le message pour le moment.");
+            setError(getErrorMessage(err, "Impossible d'envoyer le message pour le moment."));
         } finally {
             setBusy(false);
         }

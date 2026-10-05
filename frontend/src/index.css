@@ -21,6 +21,11 @@
   --bottomnav-height: 64px;
   --sidebar-width: 240px;
   --radius: 10px;
+
+  /* Alias utilisés par Hotspot.css, HotspotMonitor.css et Dashboard.css */
+  --border-color: var(--border);
+  --primary-color: var(--violet);
+  --danger-glow: #fde8e8;
 }
 
 * {
@@ -145,4 +150,39 @@ input {
   background: #fff;
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* Cartes de chiffres (Portefeuille, Administration) */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.stat-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Texte d'introduction sous un titre de page */
+.greeting {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+/* Conteneur qui fait défiler un tableau trop large au lieu de déborder de l'écran */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* Sur téléphone, 16 px minimum dans les champs : évite le zoom automatique de Safari (iPhone) */
+@media (max-width: 767px) {
+  body .text-input,
+  body .select-input,
+  body .search-bar input {
+    font-size: 16px;
+  }
 }

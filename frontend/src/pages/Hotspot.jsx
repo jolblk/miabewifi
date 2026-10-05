@@ -3,6 +3,7 @@ import { Plus, Ticket, Check, Download, RefreshCw, Trash2, X, Pencil } from 'luc
 import { useHotspotData } from '../hooks/useHotspotData';
 import { confirmDialog } from '../utils/confirm';
 import './Hotspot.css';
+import { formatAmount, formatDate } from '../utils/format';
 
 // Un ticket peut cumuler plusieurs états : vendu, utilisé (le client s'est connecté), expiré.
 function ticketBadges(v) {
@@ -151,7 +152,7 @@ export default function Hotspot() {
         try {
             await sellVoucher(voucherId);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la vente du ticket.");
+            setActionError(errorMessage(err, "Erreur lors de la vente du ticket."));
         } finally {
             setBusy(false);
         }
@@ -164,7 +165,7 @@ export default function Hotspot() {
         try {
             await deleteVoucher(voucherId);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du ticket.");
+            setActionError(errorMessage(err, "Erreur lors de la suppression du ticket."));
         } finally {
             setBusy(false);
         }
@@ -183,7 +184,7 @@ export default function Hotspot() {
                     : "Aucun ticket supprimé : tous ont déjà été vendus."
             );
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du lot.");
+            setActionError(errorMessage(err, "Erreur lors de la suppression du lot."));
         } finally {
             setBusy(false);
         }
@@ -197,7 +198,7 @@ export default function Hotspot() {
             const res = await syncNow();
             setActionInfo(`Mise à jour terminée : ${res.connexions_detectees} connexion(s) détectée(s), ${res.expires} ticket(s) expiré(s).`);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Impossible de mettre à jour les tickets.");
+            setActionError(errorMessage(err, "Impossible de mettre à jour les tickets."));
         } finally {
             setBusy(false);
         }
@@ -254,7 +255,7 @@ export default function Hotspot() {
             await deleteProfile(profile['.id']);
             if (profileName === profile.name) setProfileName('');
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la suppression du forfait.");
+            setActionError(errorMessage(err, "Erreur lors de la suppression du forfait."));
         } finally {
             setBusy(false);
         }
@@ -364,7 +365,7 @@ export default function Hotspot() {
             const res = await installLoginPage();
             setActionInfo(res.message);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Impossible d'installer la page de connexion.");
+            setActionError(errorMessage(err, "Impossible d'installer la page de connexion."));
         } finally {
             setBusy(false);
         }
@@ -781,7 +782,7 @@ export default function Hotspot() {
                     <div key={batch.id} className="section-card">
                         <div className="section-header">
                             <div>
-                                <h2>{batch.profile_name} — {batch.prix_unitaire} FCFA</h2>
+                                <h2>{batch.profile_name} — {formatAmount(batch.prix_unitaire)} FCFA</h2>
                                 <span className="empty-hint">
                                     {batchSummary(batch)}
                                     {batch.validite_jours ? ` · validité ${batch.validite_jours} j` : ''}
@@ -789,7 +790,7 @@ export default function Hotspot() {
                                 </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <span className="empty-hint">{new Date(batch.created_at).toLocaleDateString()}</span>
+                                <span className="empty-hint">{formatDate(batch.created_at)}</span>
                                 <label className="hotspot-check" title="Proposer ce lot sur la page de paiement en ligne">
                                     <input
                                         type="checkbox"

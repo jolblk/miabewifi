@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/client';
 import '../Dashboard.css';
 import './Admin.css';
+import { formatAmount } from '../../utils/format';
 
 export default function AdminOverview() {
     const [stats, setStats] = useState(null);
@@ -38,8 +39,8 @@ export default function AdminOverview() {
 
                     <div className="stat-card">
                         <div className="stat-label">Revenus (30 derniers jours)</div>
-                        <div className="stat-number">{stats.revenus_30j} <small>FCFA</small></div>
-                        <div className="stat-sub">Total cumulé : {stats.revenus_total} FCFA</div>
+                        <div className="stat-number">{formatAmount(stats.revenus_30j)} <small>FCFA</small></div>
+                        <div className="stat-sub">Total cumulé : {formatAmount(stats.revenus_total)} FCFA</div>
                     </div>
                 </div>
             )}

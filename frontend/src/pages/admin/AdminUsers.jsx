@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useSearch } from '../../context/SearchContext';
 import { stripAccents } from '../../utils/normalizeText';
 import './Admin.css';
+import { formatAmount, formatDate } from '../../utils/format';
 
 export default function AdminUsers() {
     const [users, setUsers] = useState([]);
@@ -57,9 +58,9 @@ export default function AdminUsers() {
                                             {u.role}
                                         </span>
                                     </td>
-                                    <td>{u.solde} FCFA</td>
+                                    <td>{formatAmount(u.solde)} FCFA</td>
                                     <td>{u.nb_routers}</td>
-                                    <td>{new Date(u.created_at).toLocaleDateString()}</td>
+                                    <td>{formatDate(u.created_at)}</td>
                                 </tr>
                             ))}
                         </tbody>

@@ -69,7 +69,7 @@ export default function HotspotMonitor() {
             {loading && <p className="empty-hint">Chargement...</p>}
 
             {!loading && activeTab === 'sessions' && (
-                <div className="section-card">
+                <div className="section-card table-scroll">
                     {sessions.length === 0 ? (
                         <p className="empty-hint">Aucun client connecté en ce moment.</p>
                     ) : (
@@ -98,7 +98,7 @@ export default function HotspotMonitor() {
             )}
 
             {!loading && activeTab === 'users' && (
-                <div className="section-card">
+                <div className="section-card table-scroll">
                     {users.length === 0 ? (
                         <p className="empty-hint">Aucun utilisateur HotSpot sur ce routeur.</p>
                     ) : (
@@ -123,7 +123,7 @@ export default function HotspotMonitor() {
             )}
 
             {!loading && activeTab === 'profiles' && (
-                <div className="section-card">
+                <div className="section-card table-scroll">
                     {profiles.length === 0 ? (
                         <p className="empty-hint">Aucun profil HotSpot configuré sur ce routeur.</p>
                     ) : (

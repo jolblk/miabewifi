@@ -4,6 +4,8 @@ import { Copy, Check, Loader2, Wifi, PartyPopper } from 'lucide-react';
 import api from '../api/client';
 import { confirmDialog } from '../utils/confirm';
 import './InstallWizard.css';
+import { formatAmount } from '../utils/format';
+import { getErrorMessage } from '../utils/errorMessage';
 
 const STEP_LABELS = {
     1: "création du routeur",
@@ -105,7 +107,7 @@ export default function InstallWizard() {
                 const detail = err.response?.data?.detail;
                 // 400 = version RouterOS trop ancienne : inutile de réessayer.
                 if (err.response?.status === 400 || attempt === PROVISION_MAX_ATTEMPTS - 1) {
-                    setProvisionError(detail || "Impossible de préparer le routeur. Réessaie dans un instant.");
+                    setProvisionError(typeof detail === 'string' && detail ? detail : "Impossible de préparer le routeur. Réessaie dans un instant.");
                     return;
                 }
                 await new Promise((r) => setTimeout(r, PROVISION_RETRY_DELAY_MS));
@@ -126,7 +128,7 @@ export default function InstallWizard() {
             setScript(res.data.config_script);
             setStep(2);
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible de créer le routeur. Réessayez.");
+            setError(getErrorMessage(err, "Impossible de créer le routeur. Réessayez."));
         } finally {
             setBusy(false);
         }
@@ -172,7 +174,7 @@ export default function InstallWizard() {
             const res = await api.post(`/routers/${router.id}/setup-hotspot`, { interface: lanInterface });
             setProvisionInfo(res.data);
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible de créer le HotSpot.");
+            setError(getErrorMessage(err, "Impossible de créer le HotSpot."));
         } finally {
             setBusy(false);
         }
@@ -185,7 +187,7 @@ export default function InstallWizard() {
             await api.post(`/routers/${router.id}/activer-pack`, { pack_id: packId });
             navigate('/routers');
         } catch (err) {
-            setError(err.response?.data?.detail || "Erreur lors de l'activation du pack.");
+            setError(getErrorMessage(err, "Erreur lors de l'activation du pack."));
         } finally {
             setBusy(false);
         }
@@ -415,7 +417,7 @@ export default function InstallWizard() {
                             >
                                 {p.id === RECOMMENDED_PACK_ID && <span className="wizard-pack-badge">Recommandé</span>}
                                 <span className="wizard-pack-label">{p.label}</span>
-                                <span className="wizard-pack-price">{p.montant} FCFA</span>
+                                <span className="wizard-pack-price">{formatAmount(p.montant)} FCFA</span>
                             </button>
                         ))}
                     </div>

@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useSearch } from '../../context/SearchContext';
 import { stripAccents } from '../../utils/normalizeText';
 import './Admin.css';
+import { formatDate } from '../../utils/format';
 
 export default function AdminRouters() {
     const [routers, setRouters] = useState([]);
@@ -59,7 +60,7 @@ export default function AdminRouters() {
                                             {r.actif ? 'Actif' : 'Inactif'}
                                         </span>
                                     </td>
-                                    <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                                    <td>{formatDate(r.created_at)}</td>
                                 </tr>
                             ))}
                         </tbody>

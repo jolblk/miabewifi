@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useSearch } from '../../context/SearchContext';
 import { stripAccents } from '../../utils/normalizeText';
 import './Admin.css';
+import { formatAmount, formatDateTime } from '../../utils/format';
 
 const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success' };
 const typeLabel = { recharge: 'Recharge', vente: 'Vente de ticket', debit: 'Pack activé', retrait: 'Retrait' };
@@ -56,13 +57,13 @@ export default function AdminTransactions() {
                                     <td>{t.user_nom}</td>
                                     <td>{typeLabel[t.type] || t.type}</td>
                                     <td>{t.methode}</td>
-                                    <td>{t.montant} FCFA</td>
+                                    <td>{formatAmount(t.montant)} FCFA</td>
                                     <td>
                                         <span className={`badge ${statutClass[t.statut] || 'badge-warning'}`}>
                                             {t.statut}
                                         </span>
                                     </td>
-                                    <td>{new Date(t.created_at).toLocaleString()}</td>
+                                    <td>{formatDateTime(t.created_at)}</td>
                                 </tr>
                             ))}
                         </tbody>

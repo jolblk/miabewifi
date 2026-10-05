@@ -7,6 +7,8 @@ import { stripAccents } from '../utils/normalizeText';
 import Hotspot from './Hotspot';
 import { confirmDialog } from '../utils/confirm';
 import './Routers.css';
+import { formatDate } from '../utils/format';
+import { getErrorMessage } from '../utils/errorMessage';
 
 const ROUTERS_TABS = [
     { key: 'routers', label: 'Mes routeurs', icon: Radio },
@@ -66,7 +68,7 @@ export default function Routers() {
             setNom('');
             setShowForm(false);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la création du routeur.");
+            setActionError(getErrorMessage(err, "Erreur lors de la création du routeur."));
         } finally {
             setBusy(false);
         }
@@ -80,7 +82,7 @@ export default function Routers() {
         try {
             await deleteRouter(routerId);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la suppression.");
+            setActionError(getErrorMessage(err, "Erreur lors de la suppression."));
         } finally {
             setBusy(false);
         }
@@ -94,7 +96,7 @@ export default function Routers() {
             const data = await regenerateRouter(routerId);
             setConfig({ nom: data.router.nom, script: data.config_script });
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de la régénération.");
+            setActionError(getErrorMessage(err, "Erreur lors de la régénération."));
         } finally {
             setBusy(false);
         }
@@ -119,7 +121,7 @@ export default function Routers() {
             setCredsSuccess(true);
             setApiPassword('');
         } catch (err) {
-            setCredsError(err.response?.data?.detail || "Erreur lors de l'enregistrement des identifiants.");
+            setCredsError(getErrorMessage(err, "Erreur lors de l'enregistrement des identifiants."));
         } finally {
             setCredsBusy(false);
         }
@@ -132,7 +134,7 @@ export default function Routers() {
             await activerPack(routerId, packId);
             setPackRouterId(null);
         } catch (err) {
-            setActionError(err.response?.data?.detail || "Erreur lors de l'activation du pack.");
+            setActionError(getErrorMessage(err, "Erreur lors de l'activation du pack."));
         } finally {
             setBusy(false);
         }
@@ -239,10 +241,10 @@ export default function Routers() {
                             </div>
 
                             {r.subscription_expires_at && (
-                                <p className="router-expiry">Abonnement jusqu'au {new Date(r.subscription_expires_at).toLocaleDateString()}</p>
+                                <p className="router-expiry">Abonnement jusqu'au {formatDate(r.subscription_expires_at)}</p>
                             )}
                             {!r.subscription_expires_at && r.trial_expires_at && (
-                                <p className="router-expiry">Essai jusqu'au {new Date(r.trial_expires_at).toLocaleDateString()}</p>
+                                <p className="router-expiry">Essai jusqu'au {formatDate(r.trial_expires_at)}</p>
                             )}
 
                             {packRouterId === r.id ? (
@@ -282,7 +284,7 @@ export default function Routers() {
                                         API MikroTik :{' '}
                                         <strong>{r.mikrotik_api_username ? `configurée (${r.mikrotik_api_username})` : 'non configurée'}</strong>
                                     </span>
-                                    <span>Créé le {new Date(r.created_at).toLocaleDateString()}</span>
+                                    <span>Créé le {formatDate(r.created_at)}</span>
                                     {r.ports?.length > 0 && (
                                         <div className="ports-row">
                                             {r.ports.map((p) => (

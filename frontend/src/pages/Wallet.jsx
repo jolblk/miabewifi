@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { useWalletData } from '../hooks/useWalletData';
 import './Wallet.css';
+import { formatAmount, formatDateTime } from '../utils/format';
+import { getErrorMessage } from '../utils/errorMessage';
 
 const statutLabel = { en_attente: 'En attente', confirme: 'Confirmé' };
 const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success' };
@@ -38,7 +40,7 @@ export default function Wallet() {
             }
             setMontant('');
         } catch (err) {
-            setError(err.response?.data?.detail || "Une erreur est survenue.");
+            setError(getErrorMessage(err, "Une erreur est survenue."));
         } finally {
             setBusy(false);
         }
@@ -50,7 +52,7 @@ export default function Wallet() {
 
             <div className="stat-card" style={{ marginBottom: 20, maxWidth: 320 }}>
                 <div className="stat-label">Solde disponible</div>
-                <div className="stat-number">{loading ? '--' : solde} <small>FCFA</small></div>
+                <div className="stat-number">{loading ? '--' : formatAmount(solde)} <small>FCFA</small></div>
             </div>
 
             <div className="section-card">
@@ -134,11 +136,11 @@ export default function Wallet() {
                             <div key={t.id} className="tx-row">
                                 <div className="tx-main">
                                     <span>{typeLabel[t.type] || t.type} — {t.methode}</span>
-                                    <span className="tx-date">{new Date(t.created_at).toLocaleString()}</span>
+                                    <span className="tx-date">{formatDateTime(t.created_at)}</span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                     <span className={`tx-amount ${isCredit ? 'positive' : 'negative'}`}>
-                                        {isCredit ? '+' : '-'}{t.montant} FCFA
+                                        {isCredit ? '+' : '-'}{formatAmount(t.montant)} FCFA
                                     </span>
                                     <span className={`badge ${statutClass[t.statut] || 'badge-warning'}`}>
                                         {statutLabel[t.statut] || t.statut}

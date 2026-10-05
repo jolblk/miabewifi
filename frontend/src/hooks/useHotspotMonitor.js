@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export function useHotspotMonitor() {
     const [routers, setRouters] = useState([]);
@@ -40,7 +41,7 @@ export function useHotspotMonitor() {
                 setSessions(Array.isArray(sessionsRes.data) ? sessionsRes.data : []);
             })
             .catch((err) => {
-                setError(err.response?.data?.detail || "Impossible de joindre ce routeur.");
+                setError(getErrorMessage(err, "Impossible de joindre ce routeur."));
                 setUsers([]);
                 setProfiles([]);
                 setSessions([]);

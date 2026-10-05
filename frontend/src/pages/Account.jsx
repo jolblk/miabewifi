@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { LogOut, Send, User, HelpCircle } from 'lucide-react';
 import api from '../api/client';
 import './Account.css';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function Account() {
     const { user, logout } = useOutletContext();
@@ -78,7 +79,7 @@ function SupportTab() {
             setMessage('');
             setTelephone('');
         } catch (err) {
-            setError(err.response?.data?.detail || "Impossible d'envoyer le message pour le moment.");
+            setError(getErrorMessage(err, "Impossible d'envoyer le message pour le moment."));
         } finally {
             setBusy(false);
         }

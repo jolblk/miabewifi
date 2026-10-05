@@ -40,7 +40,7 @@ export default function AppLayout() {
     return (
         <div style={{ display: 'flex' }}>
             <Sidebar isAdmin={isAdmin} onLogout={handleLogout} />
-            <main style={{ flex: 1, padding: 24 }}>
+            <main style={{ flex: 1, padding: 24, minWidth: 0 }}>
                 <div className="app-topbar">
                     <SearchBar />
                     <NotificationsBell />

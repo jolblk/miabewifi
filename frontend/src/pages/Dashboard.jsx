@@ -2,6 +2,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, XCircle, Wallet } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import './Dashboard.css';
+import { formatAmount, formatDate } from '../utils/format';
 
 function routerStatus(r, now) {
     const trialActive = r.trial_expires_at && new Date(r.trial_expires_at) > now;
@@ -13,7 +14,7 @@ function routerStatus(r, now) {
         return { label: 'À activer', tone: 'danger', Icon: XCircle };
     }
     if (aboActive && expiryDate <= dans7j) {
-        return { label: `Expire le ${expiryDate.toLocaleDateString()}`, tone: 'warning', Icon: AlertTriangle };
+        return { label: `Expire le ${formatDate(expiryDate)}`, tone: 'warning', Icon: AlertTriangle };
     }
     return { label: 'Actif', tone: 'success', Icon: CheckCircle2 };
 }
@@ -44,7 +45,7 @@ export default function Dashboard() {
                     <Wallet size={22} />
                     <div>
                         <div className="stat-label">Solde disponible</div>
-                        <div className="stat-number">{loading ? '--' : solde} <small>FCFA</small></div>
+                        <div className="stat-number">{loading ? '--' : formatAmount(solde)} <small>FCFA</small></div>
                     </div>
                 </div>
                 <button className="btn-primary" onClick={(e) => { e.stopPropagation(); navigate('/wallet'); }}>

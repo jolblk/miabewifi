@@ -20,6 +20,7 @@ import AdminTransactions from './pages/admin/AdminTransactions';
 import AdminLayout from './layouts/AdminLayout';
 import { SearchProvider } from './context/SearchContext';
 import ConfirmHost from './components/ConfirmHost';
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
               </Route>
             </Route>
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
         <ConfirmHost />
       </SearchProvider>
