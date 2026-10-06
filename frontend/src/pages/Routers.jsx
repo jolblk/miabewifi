@@ -4,7 +4,7 @@ import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRo
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
 import { stripAccents } from '../utils/normalizeText';
-import Hotspot from './Hotspot';
+import HotspotTickets from './hotspot/HotspotTickets';
 import { confirmDialog } from '../utils/confirm';
 import './Routers.css';
 import { formatDate } from '../utils/format';
@@ -167,7 +167,7 @@ export default function Routers() {
                 })}
             </div>
 
-            {activeTab === 'tickets' && <Hotspot />}
+            {activeTab === 'tickets' && <HotspotTickets onGoToRouters={() => setActiveTab('routers')} />}
 
             {activeTab === 'routers' && (
             <>
