@@ -11,7 +11,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     nom = Column(String, nullable=False)
-    solde = Column(Float, default=0.0)
+    solde = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     role = Column(String, default="client")  # "client" ou "admin"
     trial_used = Column(Boolean, nullable=False, default=False, server_default=false())  # essai gratuit déjà accordé
@@ -65,7 +65,7 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    montant = Column(Float, nullable=False)
+    montant = Column(Integer, nullable=False)
     methode = Column(String, nullable=False)  # FLOOZ, TMONEY
     statut = Column(String, default="en_attente")
     identifier = Column(String, unique=True, nullable=False)
@@ -79,7 +79,7 @@ class VoucherBatch(Base):
     router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     profile_name = Column(String, nullable=False)  # nom du profil HotSpot sur le MikroTik
-    prix_unitaire = Column(Float, nullable=False)
+    prix_unitaire = Column(Integer, nullable=False)
     quantite = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     validite_jours = Column(Integer, nullable=True)  # validité calendaire, comptée dès la 1re connexion
@@ -111,12 +111,12 @@ class Sale(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     voucher_id = Column(Integer, ForeignKey("vouchers.id"), unique=True, nullable=False)
-    montant = Column(Float, nullable=False)
+    montant = Column(Integer, nullable=False)
     # NULL = vente en libre-service (payée par le client lui-même, pas par toi/ton équipe)
     vendu_par = Column(Integer, ForeignKey("users.id"), nullable=True)
     vendu_le = Column(DateTime, default=datetime.utcnow)
     acheteur_telephone = Column(String, nullable=True)  # rempli uniquement pour une vente en libre-service
-    frais = Column(Float, nullable=True)  # frais prélevés (FCFA) sur une vente en libre-service ; NULL = aucun
+    frais = Column(Integer, nullable=True)  # frais prélevés (FCFA) sur une vente en libre-service ; NULL = aucun
 
     voucher = relationship("Voucher", back_populates="sale")
 
@@ -130,7 +130,7 @@ class HotspotPurchase(Base):
     router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("voucher_batches.id"), nullable=False)
     telephone = Column(String, nullable=False)
-    montant = Column(Float, nullable=False)
+    montant = Column(Integer, nullable=False)
     methode = Column(String, nullable=False)  # FLOOZ, TMONEY
     statut = Column(String, default="en_attente")  # en_attente, confirme, en_rupture, echoue
     identifier = Column(String, unique=True, nullable=False)

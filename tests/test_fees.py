@@ -56,3 +56,8 @@ def test_invalid_inputs_are_rejected():
     assert _raises_value_error(-500, 0.01)
     assert _raises_value_error(1000, -0.01)
     assert _raises_value_error(1000, 1)
+
+def test_results_are_whole_numbers():
+    # Les montants sont stockés en entiers (FCFA, pas de centimes).
+    frais, net = compute_sale_split(250, 0.01)
+    assert isinstance(frais, int) and isinstance(net, int)

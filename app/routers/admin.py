@@ -171,6 +171,6 @@ def refund_withdrawal(transaction_id: int, db: Session = Depends(get_db), _admin
     if user is None:
         db.rollback()
         raise HTTPException(status_code=404, detail="Client introuvable.")
-    user.solde = (user.solde or 0.0) + transaction.montant
+    user.solde = (user.solde or 0) + transaction.montant
     db.commit()
     return {"message": "Retrait annulé : le montant a été rendu au client."}

@@ -7,7 +7,7 @@ arrondis à l'entier SUPÉRIEUR, pour ne jamais vendre à perte face aux frais P
 from decimal import Decimal, ROUND_CEILING
 
 
-def compute_sale_split(montant, rate) -> tuple[float, float]:
+def compute_sale_split(montant, rate) -> tuple[int, int]:
     """Retourne (frais, net) pour une vente de `montant` FCFA avec un taux `rate`
     (ex: 0.01 pour 1 %). On a toujours frais + net == montant, et 0 <= frais <= montant."""
     m = Decimal(str(montant))
@@ -21,4 +21,4 @@ def compute_sale_split(montant, rate) -> tuple[float, float]:
     if frais > m:
         frais = m
     net = m - frais
-    return float(frais), float(net)
+    return int(frais), int(net)

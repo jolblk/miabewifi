@@ -248,7 +248,7 @@ async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchas
         if owner_id is not None else None
     )
     if owner is not None:
-        owner.solde = (owner.solde or 0.0) + net
+        owner.solde = (owner.solde or 0) + net
         db.add(models.Transaction(
             user_id=owner.id,
             montant=net,
@@ -294,7 +294,7 @@ def _confirm_recharge(db: Session, transaction: models.Transaction) -> bool:
         logger.error("Utilisateur introuvable pour la recharge %s : aucun crédit effectué", transaction.identifier)
         return False
 
-    user.solde = (user.solde or 0.0) + transaction.montant
+    user.solde = (user.solde or 0) + transaction.montant
     db.commit()
     return True
 

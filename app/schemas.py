@@ -16,7 +16,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     nom: str
-    solde: float
+    solde: int
     role: str
     created_at: datetime
 
@@ -80,13 +80,13 @@ class MikrotikCredentialsUpdate(BaseModel):
 class RechargeRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
-    montant: float = Field(gt=0)
+    montant: int = Field(gt=0)
 
 
 class WithdrawRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
-    montant: float = Field(gt=0)
+    montant: int = Field(gt=0)
 
 
 class SupportMessage(BaseModel):
@@ -100,7 +100,7 @@ class ActivatePackRequest(BaseModel):
 
 class VoucherBatchCreate(BaseModel):
     profile_name: str
-    prix_unitaire: float = Field(gt=0)
+    prix_unitaire: int = Field(gt=0)
     quantite: int = Field(gt=0, le=500)
     # Nombre de jours de validité APRÈS la 1re connexion. Vide = pas de limite calendaire.
     validite_jours: Optional[int] = Field(default=None, ge=1, le=365)
@@ -109,16 +109,16 @@ class VoucherBatchCreate(BaseModel):
 
 
 class SaleCreate(BaseModel):
-    montant: Optional[float] = None
+    montant: Optional[int] = None
 
 
 class SaleOut(BaseModel):
     id: int
-    montant: float
+    montant: int
     vendu_par: Optional[int] = None
     vendu_le: datetime
     acheteur_telephone: Optional[str] = None
-    frais: Optional[float] = None
+    frais: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -140,7 +140,7 @@ class VoucherOut(BaseModel):
 class VoucherBatchOut(BaseModel):
     id: int
     profile_name: str
-    prix_unitaire: float
+    prix_unitaire: int
     quantite: int
     created_at: datetime
     validite_jours: Optional[int] = None
