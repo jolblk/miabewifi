@@ -499,15 +499,7 @@ async def _prepare_hotspot(client: RouterOSClient, db_router: models.Router, ver
     login_page_installed = False
     if db_router.setup_mode == "new":
         try:
-            await client.write_file(
-                mikrotik_scripts.LOGIN_PAGE_ROUTER_FILE,
-                mikrotik_scripts.render_login_page(
-                    db_router.public_token,
-                    brand_name=db_router.brand_name,
-                    brand_color=db_router.brand_color,
-                    brand_logo=db_router.brand_logo,
-                ),
-            )
+            await mikrotik_scripts.install_hotspot_pages(client, db_router)
             login_page_installed = True
         except Exception:
             login_page_installed = False  # non bloquant : la page par défaut du routeur reste utilisable

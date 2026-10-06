@@ -66,6 +66,7 @@ export default function Hotspot() {
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
         deleteVoucher, deleteBatch, createProfile, deleteProfile,
         updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
+        uploadBackground, removeBackground,
     } = useHotspotData();
 
     const [showForm, setShowForm] = useState(false);
@@ -97,6 +98,8 @@ export default function Hotspot() {
     const [sOnline, setSOnline] = useState(true);
     const [sBrandName, setSBrandName] = useState('');
     const [sBrandColor, setSBrandColor] = useState('');
+    const [sSlogan, setSSlogan] = useState('');
+    const [sPhone, setSPhone] = useState('');
     const [sPrefix, setSPrefix] = useState('');
     const [sLength, setSLength] = useState('8');
     const [sDigits, setSDigits] = useState(false);
@@ -114,6 +117,8 @@ export default function Hotspot() {
             setSOnline(settings.online_sales_enabled);
             setSBrandName(settings.brand_name || '');
             setSBrandColor(settings.brand_color || '');
+            setSSlogan(settings.brand_slogan || '');
+            setSPhone(settings.brand_phone || '');
             setSPrefix(settings.code_prefix || '');
             setSLength(String(settings.code_length || 8));
             setSDigits(Boolean(settings.code_digits_only));
@@ -303,6 +308,8 @@ export default function Hotspot() {
                 online_sales_enabled: sOnline,
                 brand_name: sBrandName,
                 brand_color: sBrandColor,
+                brand_slogan: sSlogan,
+                brand_phone: sPhone,
                 code_prefix: sPrefix,
                 code_length: Number(sLength) || 8,
                 code_digits_only: sDigits,
@@ -327,6 +334,35 @@ export default function Hotspot() {
             setActionInfo("Logo enregistré. Cliquez sur « Appliquer sur la page de connexion » pour l'afficher sur le Wi-Fi.");
         } catch (err) {
             setActionError(errorMessage(err, "Impossible d'envoyer ce logo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleBackgroundChange(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setBusy(true);
+        setActionError('');
+        setActionInfo('');
+        try {
+            await uploadBackground(file);
+            setActionInfo("Photo de fond enregistrée. Cliquez sur « Appliquer sur la page de connexion » pour l'afficher sur le Wi-Fi.");
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible d'envoyer cette photo."));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleRemoveBackground() {
+        setBusy(true);
+        setActionError('');
+        try {
+            await removeBackground();
+        } catch (err) {
+            setActionError(errorMessage(err, "Impossible de retirer la photo de fond."));
         } finally {
             setBusy(false);
         }
@@ -357,7 +393,7 @@ export default function Hotspot() {
     }
 
     async function handleInstallLoginPage() {
-        if (!(await confirmDialog("Installer la page de connexion simplifiée (un seul champ : le code) ? Elle remplace la page de connexion actuelle de votre HotSpot.", { confirmLabel: 'Installer' }))) return;
+        if (!(await confirmDialog("Installer les pages MIABEWIFI sur ce routeur (connexion avec vos tarifs, page après connexion, statut et déconnexion) ? Elles remplacent les pages actuelles de votre HotSpot.", { confirmLabel: 'Installer' }))) return;
         setBusy(true);
         setActionError('');
         setActionInfo('');
@@ -551,6 +587,27 @@ export default function Hotspot() {
                         onChange={(e) => setSBrandName(e.target.value)}
                     />
 
+                    <label className="field-label" htmlFor="brand-slogan">Slogan sous le nom (facultatif)</label>
+                    <input
+                        id="brand-slogan"
+                        className="text-input"
+                        maxLength={60}
+                        placeholder="ex : Internet rapide et abordable"
+                        value={sSlogan}
+                        onChange={(e) => setSSlogan(e.target.value)}
+                    />
+
+                    <label className="field-label" htmlFor="brand-phone">Téléphone d'aide affiché aux clients (facultatif)</label>
+                    <input
+                        id="brand-phone"
+                        className="text-input"
+                        type="tel"
+                        maxLength={24}
+                        placeholder="ex : 90 00 00 00"
+                        value={sPhone}
+                        onChange={(e) => setSPhone(e.target.value)}
+                    />
+
                     <label className="field-label" htmlFor="brand-color">Couleur principale</label>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         <input
@@ -573,6 +630,24 @@ export default function Hotspot() {
                             <button type="button" className="btn-secondary" disabled={busy} onClick={handleRemoveLogo}>Retirer le logo</button>
                         )}
                     </div>
+
+                    <label className="field-label" htmlFor="brand-background">Photo de fond de la page de connexion (JPEG ou PNG, 8 Mo maximum)</label>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {settings.background_url && (
+                            <img
+                                src={settings.background_url}
+                                alt="Photo de fond actuelle"
+                                style={{ width: 120, height: 68, objectFit: 'cover', borderRadius: 8 }}
+                            />
+                        )}
+                        <input id="brand-background" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={handleBackgroundChange} />
+                        {settings.has_background && (
+                            <button type="button" className="btn-secondary" disabled={busy} onClick={handleRemoveBackground}>Retirer la photo</button>
+                        )}
+                    </div>
+                    <p className="empty-hint">
+                        Elle est automatiquement allégée pour s'afficher vite. Sans photo, le fond prend votre couleur principale.
+                    </p>
 
                     <label className="field-label" htmlFor="code-prefix">Format des codes de tickets</label>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -611,7 +686,7 @@ export default function Hotspot() {
                         </button>
                     </div>
                     <p className="empty-hint">
-                        Le nom, la couleur et le logo s'affichent sur la page de connexion une fois « Appliquer » cliqué (elle remplace la page actuelle du HotSpot), et sur les prochains PDF de tickets.
+                        Le nom, le slogan, le téléphone, la couleur, le logo et la photo s'affichent sur les pages du Wi-Fi une fois « Appliquer » cliqué (elles remplacent les pages actuelles du HotSpot). Le nom, la couleur et le logo figurent aussi sur les prochains PDF de tickets. une fois « Appliquer » cliqué (elle remplace la page actuelle du HotSpot), et sur les prochains PDF de tickets.
                     </p>
                 </div>
             )}

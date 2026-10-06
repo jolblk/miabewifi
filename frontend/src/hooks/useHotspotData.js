@@ -144,6 +144,20 @@ export function useHotspotData() {
         return res.data;
     }
 
+    async function uploadBackground(file) {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await api.post(`/hotspot/${selectedRouterId}/settings/background`, form);
+        setSettingsState({ routerId: selectedRouterId, data: res.data });
+        return res.data;
+    }
+
+    async function removeBackground() {
+        const res = await api.delete(`/hotspot/${selectedRouterId}/settings/background`);
+        setSettingsState({ routerId: selectedRouterId, data: res.data });
+        return res.data;
+    }
+
     async function removeLogo() {
         const res = await api.delete(`/hotspot/${selectedRouterId}/settings/logo`);
         setSettingsState({ routerId: selectedRouterId, data: res.data });
@@ -197,5 +211,6 @@ export function useHotspotData() {
         generateBatch, sellVoucher, syncNow, applyRateLimit, installLoginPage, downloadBatchPdf,
         deleteVoucher, deleteBatch, createProfile, deleteProfile,
         updateProfile, saveSettings, uploadLogo, removeLogo, setBatchOnlineSale,
+        uploadBackground, removeBackground,
     };
 }

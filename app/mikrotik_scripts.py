@@ -60,32 +60,127 @@ def sanitize_ssid(value: str | None) -> str:
 
 DEFAULT_LOGIN_TITLE = "Connexion Wi-Fi"
 
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-def render_login_page(
+# Pages installées dans le dossier HotSpot du routeur (nom sur le routeur -> modèle ici).
+#   login.html  : page de connexion (code du ticket, tarifs, paiement en ligne)
+#   alogin.html : affichée juste après la connexion
+#   status.html : temps restant, données consommées, déconnexion
+#   logout.html : affichée après la déconnexion
+HOTSPOT_PAGES = {
+    "login.html": "hotspot_login.html",
+    "alogin.html": "hotspot_alogin.html",
+    "status.html": "hotspot_status.html",
+    "logout.html": "hotspot_logout.html",
+}
+
+# Pictogramme Wi-Fi affiché quand le client n'a pas envoyé de logo.
+_DEFAULT_MARK_HTML = (
+    '<div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/>'
+    '<path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>'
+    '<line x1="12" y1="20" x2="12.01" y2="20"/></svg></div>'
+)
+
+
+def _safe_text(value: str | None) -> str:
+    """Texte saisi par le client, rendu inoffensif pour le HTML ET pour le routeur
+    (MikroTik interprète tout ce qui commence par « $( » dans ses pages)."""
+    return html.escape(value or "", quote=True).replace("$", "&#36;")
+
+
+def _page_replacements(
     public_token: str,
     brand_name: str | None = None,
     brand_color: str | None = None,
     brand_logo: str | None = None,
-) -> str:
-    """Page de connexion HotSpot, personnalisée pour CE routeur : les appels de paiement
-    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui.
-    Nom, couleur et logo viennent des réglages du client (déjà validés à la saisie ;
-    le nom est en plus échappé ici par sécurité)."""
-    page = LOGIN_PAGE_PATH.read_text(encoding="utf-8")
-    title = html.escape(brand_name or DEFAULT_LOGIN_TITLE, quote=True)
+    brand_slogan: str | None = None,
+    brand_phone: str | None = None,
+    background_version: str | None = None,
+) -> dict[str, str]:
     color = brand_color if brand_color and re.fullmatch(r"#[0-9a-fA-F]{6}", brand_color) else DEFAULT_BRAND_COLOR
-    logo_html = ""
     if brand_logo and re.fullmatch(r"data:image/png;base64,[A-Za-z0-9+/=]+", brand_logo):
         logo_html = f'<img class="logo" src="{brand_logo}" alt="">'
-    return (
-        page
-        .replace("__API_BASE__", PUBLIC_API_BASE_URL)
-        .replace("__PUBLIC_TOKEN__", public_token or "")
-        .replace("__BRAND_NAME__", title)
-        .replace("__BRAND_COLOR__", color)
-        .replace("__BRAND_LOGO_HTML__", logo_html)
-    )
+    else:
+        logo_html = _DEFAULT_MARK_HTML
+    background_style = ""
+    if public_token and background_version and re.fullmatch(r"[0-9a-f]{6,64}", background_version):
+        url = f"{PUBLIC_API_BASE_URL}/public/hotspot/{public_token}/background.jpg?v={background_version}"
+        background_style = f"background-image:url('{url}')"
+    phone = _safe_text(brand_phone)
+    contact_html = ""
+    if phone:
+        tel = re.sub(r"[^0-9+]", "", brand_phone or "")
+        contact_html = f'<a class="contact" href="tel:{tel}">Besoin d\'aide ? Appelez le {phone}</a>'
+    slogan = _safe_text(brand_slogan)
+    return {
+        "__API_BASE__": PUBLIC_API_BASE_URL,
+        "__PUBLIC_TOKEN__": public_token or "",
+        "__BRAND_NAME__": _safe_text(brand_name or DEFAULT_LOGIN_TITLE),
+        "__BRAND_COLOR__": color,
+        "__BRAND_LOGO_HTML__": logo_html,
+        "__BRAND_SLOGAN_HTML__": f'<p class="slogan">{slogan}</p>' if slogan else "",
+        "__CONTACT_HTML__": contact_html,
+        "__BACKGROUND_STYLE__": background_style,
+    }
 
+
+def _render(template_name: str, replacements: dict[str, str]) -> str:
+    page = (TEMPLATES_DIR / template_name).read_text(encoding="utf-8")
+    for key, value in replacements.items():
+        page = page.replace(key, value)
+    return page
+
+
+def render_login_page(public_token: str, **branding_values) -> str:
+    """Page de connexion HotSpot, personnalisée pour CE routeur : les appels de paiement
+    en libre-service qu'elle déclenche sont ainsi automatiquement rattachés à lui.
+    Les réglages du client sont déjà validés à la saisie ; ils sont en plus échappés ici."""
+    return _render(HOTSPOT_PAGES["login.html"], _page_replacements(public_token, **branding_values))
+
+
+def render_hotspot_pages(db_router) -> dict[str, str]:
+    """Toutes les pages HotSpot d'un routeur : {nom du fichier sur le routeur: contenu}."""
+    replacements = _page_replacements(
+        db_router.public_token,
+        brand_name=db_router.brand_name,
+        brand_color=db_router.brand_color,
+        brand_logo=db_router.brand_logo,
+        brand_slogan=db_router.brand_slogan,
+        brand_phone=db_router.brand_phone,
+        background_version=db_router.brand_background_version,
+    )
+    return {name: _render(template, replacements) for name, template in HOTSPOT_PAGES.items()}
+
+
+async def hotspot_html_directories(client) -> list[str]:
+    """Dossier(s) où le routeur lit ses pages HotSpot (réglage « html-directory » des profils
+    utilisés par ses serveurs HotSpot). Par défaut : « hotspot »."""
+    try:
+        servers = await client.get("ip/hotspot")
+        profiles = await client.get("ip/hotspot/profile")
+    except Exception:
+        return ["hotspot"]
+    used = {s.get("profile") for s in servers}
+    directories = sorted({
+        (p.get("html-directory") or "").strip("/")
+        for p in profiles
+        if p.get("name") in used and (p.get("html-directory") or "").strip("/")
+    })
+    return directories or ["hotspot"]
+
+
+async def install_hotspot_pages(client, db_router) -> list[str]:
+    """Écrit les pages HotSpot sur le routeur, dans le(s) dossier(s) qu'il utilise vraiment.
+    Renvoie les chemins écrits. Les autres fichiers du dossier (images, etc.) ne sont pas touchés."""
+    pages = render_hotspot_pages(db_router)
+    written = []
+    for directory in await hotspot_html_directories(client):
+        for name, contents in pages.items():
+            path = f"{directory}/{name}"
+            await client.write_file(path, contents)
+            written.append(path)
+    return written
 
 def generate_api_password() -> str:
     return secrets.token_urlsafe(24)  # uniquement A-Z a-z 0-9 - _ : sûr dans un script RouterOS

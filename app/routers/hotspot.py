@@ -14,7 +14,7 @@ from app import branding, models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
-from app.mikrotik_scripts import LOGIN_PAGE_ROUTER_FILE, render_login_page, DEFAULT_RATE_LIMIT
+from app.mikrotik_scripts import install_hotspot_pages, DEFAULT_RATE_LIMIT, render_login_page, DEFAULT_RATE_LIMIT
 from app.sync import sync_router
 from app.wireguard import is_router_active
 
@@ -420,6 +420,13 @@ def _settings_out(db_router: models.Router) -> schemas.HotspotSettingsOut:
         brand_color=db_router.brand_color,
         has_logo=bool(db_router.brand_logo),
         logo=db_router.brand_logo,
+        brand_slogan=db_router.brand_slogan,
+        brand_phone=db_router.brand_phone,
+        has_background=bool(db_router.brand_background_version),
+        background_url=(
+            f"/public/hotspot/{db_router.public_token}/background.jpg?v={db_router.brand_background_version}"
+            if db_router.brand_background_version else None
+        ),
         code_prefix=db_router.code_prefix,
         code_length=db_router.code_length or branding.CODE_LENGTH_DEFAULT,
         code_digits_only=bool(db_router.code_digits_only),
@@ -452,6 +459,10 @@ def update_hotspot_settings(
         db_router.brand_name = data.brand_name
     if "brand_color" in sent:
         db_router.brand_color = data.brand_color
+    if "brand_slogan" in sent:
+        db_router.brand_slogan = data.brand_slogan
+    if "brand_phone" in sent:
+        db_router.brand_phone = data.brand_phone
     if "code_prefix" in sent:
         db_router.code_prefix = data.code_prefix
     if data.online_sales_enabled is not None:
@@ -504,6 +515,42 @@ def delete_hotspot_logo(
     return _settings_out(db_router)
 
 
+@router.post("/{router_id}/settings/background", response_model=schemas.HotspotSettingsOut)
+async def upload_hotspot_background(
+    router_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Envoie la photo de fond de la page de connexion (JPEG ou PNG). Elle est vérifiée,
+    ré-encodée et allégée (250 Ko maximum) pour s'afficher vite même sur un Wi-Fi lent."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    raw = await file.read(branding.BACKGROUND_MAX_UPLOAD_BYTES + 1)
+    try:
+        data, version = branding.process_background(raw)
+    except branding.BrandingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    db_router.brand_background = data
+    db_router.brand_background_version = version
+    db.commit()
+    db.refresh(db_router)
+    return _settings_out(db_router)
+
+
+@router.delete("/{router_id}/settings/background", response_model=schemas.HotspotSettingsOut)
+def delete_hotspot_background(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    db_router = _get_authorized_router(router_id, db, current_user)
+    db_router.brand_background = None
+    db_router.brand_background_version = None
+    db.commit()
+    db.refresh(db_router)
+    return _settings_out(db_router)
+
+
 @router.patch("/vouchers/batch/{batch_id}/online-sale")
 def set_batch_online_sale(
     batch_id: int,
@@ -525,26 +572,19 @@ async def install_login_page(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Installe la page de connexion simplifiée (un seul champ : le code du ticket).
-    Remplace la page de connexion actuelle du HotSpot."""
+    """Installe les pages HotSpot MIABEWIFI sur le routeur : connexion (code du ticket et
+    tarifs), page affichée après connexion, page de statut et page de déconnexion.
+    Elles remplacent les pages actuelles du HotSpot ; les autres fichiers ne sont pas touchés."""
     db_router = _get_authorized_router(router_id, db, current_user)
     try:
         async with _client_for(db_router) as client:
-            await client.write_file(
-                LOGIN_PAGE_ROUTER_FILE,
-                render_login_page(
-                    db_router.public_token,
-                    brand_name=db_router.brand_name,
-                    brand_color=db_router.brand_color,
-                    brand_logo=db_router.brand_logo,
-                ),
-            )
+            await install_hotspot_pages(client, db_router)
     except Exception as e:
         raise HTTPException(
             status_code=502,
-            detail=f"Impossible d'installer la page de connexion sur le routeur : {e}",
+            detail=f"Impossible d'installer les pages HotSpot sur le routeur : {e}",
         )
-    return {"message": "Page de connexion installée."}
+    return {"message": "Pages HotSpot installées."}
 
 
 @router.get("/{router_id}/vouchers", response_model=list[schemas.VoucherBatchOut])

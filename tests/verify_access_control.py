@@ -56,7 +56,7 @@ models.User = make_model("User", ["id"])
 sys.modules["app.models"] = models
 
 schemas = _AnyModule("app.schemas"); sys.modules["app.schemas"] = schemas
-stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object,
+stub("fastapi", APIRouter=lambda **k: _AnyRouter(), Depends=lambda x=None: None, HTTPException=HTTPException, Request=object, Response=object,
      File=lambda *a, **k: None, UploadFile=object)
 stub("fastapi.responses", StreamingResponse=object)
 stub("sqlalchemy", func=MagicMock()); stub("sqlalchemy.orm", Session=object)
@@ -68,7 +68,7 @@ stub("app.config", PAYGATE_AUTH_TOKEN="tok")
 stub("app.crypto", decrypt=lambda x: x)
 stub("app.routeros_client", RouterOSClient=object)
 stub("app.pdf_generator", generate_vouchers_pdf=None)
-stub("app.mikrotik_scripts", LOGIN_PAGE_ROUTER_FILE="x", render_login_page=None, DEFAULT_RATE_LIMIT="2M/2M")
+stub("app.mikrotik_scripts", install_hotspot_pages=None, DEFAULT_RATE_LIMIT="2M/2M")
 stub("app.sync", sync_router=None)
 import app; app.models, app.schemas = models, schemas
 

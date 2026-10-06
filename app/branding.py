@@ -5,6 +5,7 @@ le PDF des tickets : on n'accepte donc que des valeurs sûres (pas de HTML, pas 
 images ré-encodées).
 """
 import base64
+import hashlib
 import io
 import re
 import secrets
@@ -159,3 +160,81 @@ def generate_code(prefix: str | None = None, length: int = CODE_LENGTH_DEFAULT, 
     else:
         body = secrets.token_hex((length + 1) // 2).upper()[:length]
     return (prefix or "") + body
+
+# --- Slogan et téléphone de contact (page de connexion) ------------------------
+
+BRAND_SLOGAN_MAX = 60
+# Lettres (accents compris), chiffres, espaces et ponctuation courante. Ni « $ » (variables
+# MikroTik), ni < > " (HTML) : rien qui puisse être interprété par le routeur ou le navigateur.
+_BRAND_SLOGAN_ALLOWED = re.compile(r"^[\w .,'’!?&:/()+%-]+$")
+_BRAND_PHONE_ALLOWED = re.compile(r"^\+?[0-9][0-9 ]{5,23}$")
+
+
+def clean_brand_slogan(value: str | None) -> str | None:
+    """Petite phrase sous le nom (ex : « Internet rapide et abordable »). Vide -> None."""
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) > BRAND_SLOGAN_MAX:
+        raise BrandingError(f"Le slogan est limité à {BRAND_SLOGAN_MAX} caractères.")
+    if not _BRAND_SLOGAN_ALLOWED.match(text):
+        raise BrandingError("Le slogan ne peut contenir que des lettres, chiffres, espaces et la ponctuation courante.")
+    return text
+
+
+def clean_brand_phone(value: str | None) -> str | None:
+    """Téléphone affiché pour l'aide aux clients (ex : « 90 00 00 00 »). Vide -> None."""
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if not _BRAND_PHONE_ALLOWED.match(text):
+        raise BrandingError("Numéro de contact invalide : chiffres et espaces uniquement (ex : 90 00 00 00).")
+    return text
+
+
+# --- Photo de fond (page de connexion) -----------------------------------------
+
+BACKGROUND_MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # fichier envoyé (avant réduction)
+BACKGROUND_MAX_SIDE = 1280                     # px, après réduction
+BACKGROUND_MAX_STORED_BYTES = 250 * 1024       # taille finale (JPEG) : rapide même sur un Wi-Fi lent
+
+
+def process_background(raw: bytes) -> tuple[bytes, str]:
+    """Valide une photo envoyée par le client et la convertit en JPEG léger.
+
+    Renvoie (octets JPEG, version). La version change à chaque nouvelle photo : elle sert
+    à forcer les téléphones à recharger l'image au lieu de garder l'ancienne en mémoire.
+    """
+    if not raw:
+        raise BrandingError("Fichier vide.")
+    if len(raw) > BACKGROUND_MAX_UPLOAD_BYTES:
+        raise BrandingError("Photo trop lourde (8 Mo maximum).")
+    try:
+        with Image.open(io.BytesIO(raw)) as probe:
+            if probe.format not in ("PNG", "JPEG"):
+                raise BrandingError("Format non pris en charge : utilisez une photo JPEG ou PNG.")
+            image = probe.convert("RGB")
+    except BrandingError:
+        raise
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise BrandingError("Ce fichier n'est pas une image valide (JPEG ou PNG).")
+
+    image.thumbnail((BACKGROUND_MAX_SIDE, BACKGROUND_MAX_SIDE))
+    data = b""
+    for quality in (75, 65, 55, 45):
+        out = io.BytesIO()
+        image.save(out, format="JPEG", quality=quality, optimize=True, progressive=True)
+        data = out.getvalue()
+        if len(data) <= BACKGROUND_MAX_STORED_BYTES:
+            break
+    else:
+        image.thumbnail((960, 960))
+        out = io.BytesIO()
+        image.save(out, format="JPEG", quality=50, optimize=True, progressive=True)
+        data = out.getvalue()
+    version = hashlib.sha256(data).hexdigest()[:12]
+    return data, version

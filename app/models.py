@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, true, false
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, LargeBinary, true, false
+from sqlalchemy.orm import relationship, deferred
 from datetime import datetime
 from app.database import Base
 
@@ -41,6 +41,12 @@ class Router(Base):
     brand_name = Column(String, nullable=True)   # nom affiché sur la page de connexion et les tickets PDF
     brand_color = Column(String, nullable=True)  # couleur principale (#RRGGBB)
     brand_logo = Column(Text, nullable=True)     # logo réduit, en data URI PNG
+    brand_slogan = Column(String, nullable=True)  # petite phrase sous le nom, sur la page de connexion
+    brand_phone = Column(String, nullable=True)   # téléphone d'aide affiché aux clients du Wi-Fi
+    # Photo de fond de la page de connexion (JPEG réduit). « deferred » : chargée seulement quand
+    # on la demande, pour ne pas alourdir chaque lecture de routeur (synchro, listes...).
+    brand_background = deferred(Column(LargeBinary, nullable=True))
+    brand_background_version = Column(String, nullable=True)  # change à chaque nouvelle photo
     code_prefix = Column(String, nullable=True)  # préfixe des codes de tickets (ex: "WIFI")
     code_length = Column(Integer, nullable=False, default=8, server_default="8")  # nombre de caractères après le préfixe
     code_digits_only = Column(Boolean, nullable=False, default=False, server_default=false())  # codes 100 % numériques

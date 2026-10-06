@@ -191,9 +191,21 @@ class HotspotSettingsUpdate(BaseModel):
     online_sales_enabled: Optional[bool] = None
     brand_name: Optional[str] = None
     brand_color: Optional[str] = None
+    brand_slogan: Optional[str] = None
+    brand_phone: Optional[str] = None
     code_prefix: Optional[str] = None
     code_length: Optional[int] = None
     code_digits_only: Optional[bool] = None
+
+    @field_validator("brand_slogan")
+    @classmethod
+    def _check_brand_slogan(cls, v):
+        return branding.clean_brand_slogan(v)
+
+    @field_validator("brand_phone")
+    @classmethod
+    def _check_brand_phone(cls, v):
+        return branding.clean_brand_phone(v)
 
     @field_validator("brand_name")
     @classmethod
@@ -217,6 +229,10 @@ class HotspotSettingsOut(BaseModel):
     brand_color: Optional[str] = None
     has_logo: bool = False
     logo: Optional[str] = None  # data URI (aperçu)
+    brand_slogan: Optional[str] = None
+    brand_phone: Optional[str] = None
+    has_background: bool = False
+    background_url: Optional[str] = None  # adresse de la photo de fond (aperçu)
     code_prefix: Optional[str] = None
     code_length: int = 8
     code_digits_only: bool = False

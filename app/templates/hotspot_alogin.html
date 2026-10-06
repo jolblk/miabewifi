@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__BRAND_NAME__</title>
+<style>
+  :root{--brand:__BRAND_COLOR__}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#fff;background:#120a24}
+  .bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;background-color:#120a24;background-size:cover;background-position:center}
+  .bg:before{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:var(--brand);opacity:.22}
+  .bg:after{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(160deg,rgba(10,6,22,.55),rgba(10,6,22,.85))}
+  .wrap{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 16px}
+  .inner{width:100%;max-width:400px;text-align:center}
+  .logo{display:block;max-width:96px;max-height:96px;margin:0 auto 12px;border-radius:14px}
+  .mark{width:64px;height:64px;border-radius:18px;background:var(--brand);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+  .mark svg{width:34px;height:34px;color:#fff}
+  h1{font-size:26px;line-height:1.2;margin:0;font-weight:800}
+  .slogan{margin:6px 0 0;color:rgba(255,255,255,.75);font-size:13px;letter-spacing:1px;text-transform:uppercase}
+  .card{margin-top:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:18px;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .btn{display:block;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:var(--brand);border:1px solid var(--brand);border-radius:12px;text-decoration:none;text-align:center}
+  .btn.ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
+  .txt{margin:0 0 14px;color:rgba(255,255,255,.85);font-size:14px;line-height:1.5}
+  .contact{display:inline-block;margin-top:20px;color:#fff;font-size:14px;text-decoration:none;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:9px 16px}
+</style>
+</head>
+<body>
+<div class="bg" style="__BACKGROUND_STYLE__"></div>
+<div class="wrap"><div class="inner">
+  __BRAND_LOGO_HTML__
+  <h1>Vous êtes connecté</h1>
+  <p class="slogan">__BRAND_NAME__</p>
+  <div class="card">
+    <p class="txt">Bonne navigation ! Votre ticket : <b>$(username)</b></p>
+    <a class="btn" href="$(link-redirect)">Commencer à naviguer</a>
+    <a class="btn ghost" style="margin-top:10px" href="$(link-status)">Voir mon temps restant</a>
+  </div>
+  __CONTACT_HTML__
+</div></div>
+</body>
+</html>

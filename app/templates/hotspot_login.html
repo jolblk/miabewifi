@@ -6,37 +6,55 @@
 <title>__BRAND_NAME__</title>
 <style>
   :root{--brand:__BRAND_COLOR__}
-  .logo{display:block;max-width:96px;max-height:96px;margin:0 auto 12px}
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f5fb;font-family:Arial,Helvetica,sans-serif;color:#1e1b2e}
-  .card{background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);padding:28px 22px;width:92%;max-width:360px;text-align:center}
-  h1{font-size:22px;margin:0 0 6px}
-  p{margin:0 0 18px;color:#6b6478;font-size:14px}
-  input[type=text],input[type=tel]{width:100%;box-sizing:border-box;padding:14px;font-size:20px;letter-spacing:1px;text-align:center;border:2px solid #e4e1ec;border-radius:10px;margin-bottom:10px}
-  input[type=text]:focus,input[type=tel]:focus{outline:none;border-color:var(--brand)}
-  #code{letter-spacing:3px;text-transform:uppercase}
-  button{margin-top:6px;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:var(--brand);border:0;border-radius:10px;cursor:pointer}
-  button.secondary{background:#fff;color:var(--brand);border:2px solid #ece9f5}
-  button:disabled{opacity:.6;cursor:default}
-  .err{color:#dc2626;font-size:14px;margin:0 0 12px}
-  .ok{color:#15803d;font-size:14px;margin:0 0 12px}
-  .help{margin-top:16px;font-size:12px}
-  .link-btn{background:none;border:0;color:var(--brand);font-size:13px;margin-top:14px;text-decoration:underline;cursor:pointer;padding:0}
-  .offer{border:2px solid #e4e1ec;border-radius:10px;padding:12px;margin-bottom:10px;text-align:left;cursor:pointer}
-  .offer.is-selected{border-color:var(--brand);background:#f7f5fb}
-  .offer .titre{font-weight:bold}
-  .offer .prix{color:var(--brand);font-weight:bold;float:right}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#fff;background:#120a24}
+  .bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;background-color:#120a24;background-size:cover;background-position:center}
+  .bg:before{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:var(--brand);opacity:.22}
+  .bg:after{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(160deg,rgba(10,6,22,.55),rgba(10,6,22,.85))}
+  .wrap{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 16px}
+  .inner{width:100%;max-width:400px;text-align:center}
+  .logo{display:block;max-width:96px;max-height:96px;margin:0 auto 12px;border-radius:14px}
+  .mark{width:64px;height:64px;border-radius:18px;background:var(--brand);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+  .mark svg{width:34px;height:34px;color:#fff}
+  h1{font-size:26px;line-height:1.2;margin:0;font-weight:800}
+  .slogan{margin:6px 0 0;color:rgba(255,255,255,.75);font-size:13px;letter-spacing:1px;text-transform:uppercase}
+  .card{margin-top:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:18px;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  button,.btn{display:block;width:100%;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:var(--brand);border:1px solid var(--brand);border-radius:12px;cursor:pointer;text-decoration:none;text-align:center;font-family:inherit}
+  button.ghost,.btn.ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.14);font-size:15px;text-align:left}
+  .row:last-child{border-bottom:0}
+  .row span{color:rgba(255,255,255,.7)}
+  .txt{margin:0 0 14px;color:rgba(255,255,255,.85);font-size:14px;line-height:1.5}
+  .contact{display:inline-block;margin-top:20px;color:#fff;font-size:14px;text-decoration:none;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:9px 16px}
+  .help{margin-top:14px;font-size:12px;color:rgba(255,255,255,.55)}
+  input{width:100%;padding:14px;font-size:18px;text-align:center;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:12px;margin:0 0 10px;outline:none;font-family:inherit}
+  input::placeholder{color:rgba(255,255,255,.55)}
+  input:focus{border-color:#fff;background:rgba(255,255,255,.18)}
+  #code{letter-spacing:3px;text-transform:uppercase;font-weight:bold}
+  .link-btn{display:inline-block;width:auto;background:none;border:0;color:rgba(255,255,255,.85);font-size:13px;font-weight:normal;margin-top:12px;padding:4px;text-decoration:underline}
+  .label{font-size:13px;color:rgba(255,255,255,.8);margin:24px 0 10px}
+  .offers{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .offer{width:calc(33.33% - 6px);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:12px 4px;cursor:pointer}
+  .offer:active{background:var(--brand);border-color:var(--brand)}
+  .offer b{display:block;font-size:16px}
+  .offer small{display:block;font-size:11px;color:rgba(255,255,255,.7);margin-top:2px}
+  .offer span{display:block;margin-top:6px;font-size:13px;font-weight:bold}
+  .err{color:#fee2e2;background:rgba(220,38,38,.3);border-radius:10px;padding:8px 10px;font-size:14px;margin:0 0 10px}
+  .chosen{font-size:24px;font-weight:800;margin:0}
+  .price{font-size:15px;color:rgba(255,255,255,.85);margin:4px 0 16px}
   .network-row{display:flex;gap:8px;margin-bottom:10px}
-  .network-row button{margin-top:0}
-  .network-row button.is-selected{background:var(--brand);color:#fff}
-  .spinner{width:34px;height:34px;border:4px solid #ece9f5;border-top-color:var(--brand);border-radius:50%;margin:6px auto 14px;animation:spin 1s linear infinite}
+  .network-row button{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
+  .network-row button.is-selected{background:var(--brand);border-color:var(--brand)}
+  .spinner{width:38px;height:38px;border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;margin:6px auto 16px;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .code-box{font-size:26px;font-weight:bold;letter-spacing:4px;color:var(--brand);margin:6px 0 16px}
+  .code-box{font-size:28px;font-weight:bold;letter-spacing:4px;margin:6px 0 4px}
   .hidden{display:none}
 </style>
 </head>
 <body>
 $(if chap-id)
-<form name="sendin" action="$(link-login-only)" method="post">
+<form name="sendin" action="$(link-login-only)" method="post" class="hidden">
   <input type="hidden" name="username">
   <input type="hidden" name="password">
   <input type="hidden" name="dst" value="$(link-orig)">
@@ -49,61 +67,73 @@ $(endif)
   <input type="hidden" name="password" value="">
 </form>
 
-<div class="card">
+<div class="bg" style="__BACKGROUND_STYLE__"></div>
+<div class="wrap"><div class="inner">
 
   <div id="screen-home">
     __BRAND_LOGO_HTML__
     <h1>__BRAND_NAME__</h1>
-    <p>Saisissez le code de votre ticket, ou payez directement ici</p>
-    $(if error)<div class="err">$(error)</div>$(endif)
-    <input id="code" type="text" placeholder="CODE" autocomplete="off" autocapitalize="characters">
-    <button type="button" onclick="submitCode()">Se connecter</button>
-    <button type="button" class="secondary" onclick="goTo('pay')">Payer par Flooz / T-Money</button>
-    <button type="button" class="link-btn" onclick="goTo('retrieve')">J'ai déjà payé, redonne-moi mon code</button>
+    __BRAND_SLOGAN_HTML__
+    <div class="card">
+      $(if error)<div class="err">$(error)</div>$(endif)
+      <input id="code" type="text" placeholder="Code du ticket" autocomplete="off" autocapitalize="characters">
+      <button type="button" onclick="submitCode()">Se connecter</button>
+    </div>
+    <div id="offers-section" class="hidden">
+      <p class="label">Pas de ticket ? Achetez-le ici avec Flooz ou T-Money</p>
+      <div id="offers-list" class="offers"></div>
+      <button type="button" class="link-btn" onclick="goTo('retrieve')">J'ai déjà payé, retrouver mon code</button>
+    </div>
   </div>
 
   <div id="screen-pay" class="hidden">
-    <h1>Choisir un forfait</h1>
-    <p>Le montant sera débité de votre compte mobile money</p>
-    <div id="offers-error" class="err hidden"></div>
-    <div id="offers-list"></div>
-    <div id="pay-form" class="hidden">
+    <h1>Votre forfait</h1>
+    <div class="card">
+      <p class="chosen" id="chosen-duree"></p>
+      <p class="price" id="chosen-prix"></p>
       <div class="network-row">
         <button type="button" id="net-flooz" onclick="selectNetwork('FLOOZ')">Flooz</button>
         <button type="button" id="net-tmoney" onclick="selectNetwork('TMONEY')">T-Money</button>
       </div>
-      <input id="pay-phone" type="tel" placeholder="Numéro de téléphone">
+      <input id="pay-phone" type="tel" placeholder="Numéro Flooz ou T-Money">
       <div id="pay-error" class="err hidden"></div>
       <button type="button" onclick="startPayment()">Payer maintenant</button>
     </div>
-    <button type="button" class="link-btn" onclick="goTo('home')">Retour</button>
+    <button type="button" class="link-btn" onclick="goTo('home')">Changer de forfait</button>
   </div>
 
   <div id="screen-wait" class="hidden">
     <h1>Paiement en cours</h1>
-    <div class="spinner"></div>
-    <p id="wait-message">Valide la demande de paiement reçue sur ton téléphone…</p>
-    <div id="wait-error" class="err hidden"></div>
-    <button type="button" class="link-btn hidden" id="wait-retry" onclick="goTo('pay')">Réessayer</button>
+    <div class="card">
+      <div class="spinner"></div>
+      <p class="txt" id="wait-message">Validez la demande de paiement reçue sur votre téléphone…</p>
+      <div id="wait-error" class="err hidden"></div>
+    </div>
+    <button type="button" class="link-btn hidden" id="wait-retry" onclick="goTo('home')">Réessayer</button>
   </div>
 
   <div id="screen-retrieve" class="hidden">
     <h1>Retrouver mon code</h1>
-    <p>Entrez le numéro utilisé pour le paiement</p>
-    <input id="retrieve-phone" type="tel" placeholder="Numéro de téléphone">
-    <div id="retrieve-error" class="err hidden"></div>
-    <button type="button" onclick="doRetrieve()">Retrouver mon code</button>
+    <div class="card">
+      <p class="txt">Depuis le téléphone qui a payé, entrez le numéro utilisé pour le paiement</p>
+      <input id="retrieve-phone" type="tel" placeholder="Numéro de téléphone">
+      <div id="retrieve-error" class="err hidden"></div>
+      <button type="button" onclick="doRetrieve()">Retrouver mon code</button>
+    </div>
     <button type="button" class="link-btn" onclick="goTo('home')">Retour</button>
   </div>
 
   <div id="screen-code" class="hidden">
     <h1>C'est prêt !</h1>
-    <p>Connexion automatique dans un instant… en cas de souci, voici votre code :</p>
-    <div class="code-box" id="code-display"></div>
+    <div class="card">
+      <p class="txt">Connexion automatique dans un instant… En cas de souci, voici votre code :</p>
+      <div class="code-box" id="code-display"></div>
+    </div>
   </div>
 
-  <div class="help">Un problème ? Redémarrez le Wi-Fi de votre téléphone et réessayez.</div>
-</div>
+  __CONTACT_HTML__
+  <div class="help">Un problème ? Désactivez puis réactivez le Wi-Fi de votre téléphone.</div>
+</div></div>
 
 <script>
 var API_BASE = "__API_BASE__";
@@ -122,7 +152,7 @@ function goTo(name) {
     document.getElementById("screen-" + s).classList.add("hidden");
   });
   document.getElementById("screen-" + name).classList.remove("hidden");
-  if (name === "pay") loadOffers();
+  window.scrollTo(0, 0);
   if (pollTimer && name !== "wait") { clearInterval(pollTimer); pollTimer = null; }
 }
 
@@ -133,13 +163,13 @@ function doLoginWithCode(code) {
     document.sendin.username.value = c;
     document.sendin.password.value = hexMD5("$(chap-id)" + c + "$(chap-challenge)");
     document.getElementById("code-display").textContent = c;
-    document.getElementById("screen-code").classList.remove("hidden");
+    goTo("code");
     setTimeout(function () { document.sendin.submit(); }, 600);
   } else {
     document.login.username.value = c;
     document.login.password.value = c;
     document.getElementById("code-display").textContent = c;
-    document.getElementById("screen-code").classList.remove("hidden");
+    goTo("code");
     setTimeout(function () { document.login.submit(); }, 600);
   }
 }
@@ -154,39 +184,42 @@ function submitCode() {
 }
 
 function loadOffers() {
-  var listEl = document.getElementById("offers-list");
-  var errEl = document.getElementById("offers-error");
-  errEl.classList.add("hidden");
-  listEl.innerHTML = "<p>Chargement…</p>";
-  document.getElementById("pay-form").classList.add("hidden");
+  // Les forfaits s'affichent directement sur l'accueil. Si la vente en ligne est coupée ou
+  // si le serveur ne répond pas, la section reste cachée : la connexion par code marche toujours.
   fetch(API_BASE + "/public/hotspot/" + PUBLIC_TOKEN + "/forfaits")
     .then(function (r) { return r.json(); })
     .then(function (offers) {
-      if (!offers.length) {
-        listEl.innerHTML = "";
-        errEl.textContent = "Aucun forfait disponible pour le moment.";
-        errEl.classList.remove("hidden");
-        return;
-      }
+      if (!offers || !offers.length) return;
+      var listEl = document.getElementById("offers-list");
       listEl.innerHTML = "";
       offers.forEach(function (o) {
         var div = document.createElement("div");
         div.className = "offer";
-        div.innerHTML = '<span class="titre">' + o.duree + (o.quota ? ' · ' + o.quota : '') + '</span><span class="prix">' + o.prix + ' FCFA</span>';
-        div.onclick = function () {
-          document.querySelectorAll(".offer").forEach(function (e) { e.classList.remove("is-selected"); });
-          div.classList.add("is-selected");
-          selectedBatchId = o.batch_id;
-          document.getElementById("pay-form").classList.remove("hidden");
-        };
+        var duree = document.createElement("b");
+        duree.textContent = o.duree;
+        div.appendChild(duree);
+        if (o.quota) {
+          var quota = document.createElement("small");
+          quota.textContent = o.quota;
+          div.appendChild(quota);
+        }
+        var prix = document.createElement("span");
+        prix.textContent = o.prix + " F";
+        div.appendChild(prix);
+        div.onclick = function () { chooseOffer(o); };
         listEl.appendChild(div);
       });
+      document.getElementById("offers-section").classList.remove("hidden");
     })
-    .catch(function () {
-      listEl.innerHTML = "";
-      errEl.textContent = "Connexion impossible. Vérifiez votre Wi-Fi et réessayez.";
-      errEl.classList.remove("hidden");
-    });
+    .catch(function () {});
+}
+
+function chooseOffer(o) {
+  selectedBatchId = o.batch_id;
+  document.getElementById("chosen-duree").textContent = o.duree + (o.quota ? " · " + o.quota : "");
+  document.getElementById("chosen-prix").textContent = o.prix + " FCFA";
+  document.getElementById("pay-error").classList.add("hidden");
+  goTo("pay");
 }
 
 function selectNetwork(net) {
@@ -199,7 +232,7 @@ function startPayment() {
   var errEl = document.getElementById("pay-error");
   errEl.classList.add("hidden");
   var phone = document.getElementById("pay-phone").value.trim();
-  if (!selectedBatchId) { errEl.textContent = "Choisissez un forfait."; errEl.classList.remove("hidden"); return; }
+  if (!selectedBatchId) { goTo("home"); return; }
   if (!selectedNetwork) { errEl.textContent = "Choisissez Flooz ou T-Money."; errEl.classList.remove("hidden"); return; }
   if (!/^\+?\d{8,15}$/.test(phone)) { errEl.textContent = "Numéro de téléphone invalide."; errEl.classList.remove("hidden"); return; }
 
@@ -226,7 +259,7 @@ function pollPayment(identifier) {
   var retryBtn = document.getElementById("wait-retry");
   errEl.classList.add("hidden");
   retryBtn.classList.add("hidden");
-  msgEl.textContent = "Valide la demande de paiement reçue sur ton téléphone…";
+  msgEl.textContent = "Validez la demande de paiement reçue sur votre téléphone…";
   pollDeadline = Date.now() + 120000;
 
   pollTimer = setInterval(function () {
@@ -280,6 +313,8 @@ function doRetrieve() {
       errEl.classList.remove("hidden");
     });
 }
+
+loadOffers();
 </script>
 </body>
 </html>

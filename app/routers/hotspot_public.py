@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from slowapi import Limiter
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -79,6 +79,23 @@ def _batch_label(batch: models.VoucherBatch) -> str:
         return f"{batch.validite_jours} j"
     return batch.profile_name
 
+@router.get("/{token}/background.jpg")
+@limiter.limit("120/minute")
+def get_background(request: Request, token: str, db: Session = Depends(get_db)):
+    """Photo de fond de la page de connexion de ce routeur (JPEG réduit).
+    Gardée en cache 30 jours par les téléphones : l'adresse change à chaque nouvelle photo."""
+    row = (
+        db.query(models.Router.brand_background)
+        .filter(models.Router.public_token == token)
+        .first()
+    )
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="Pas de photo de fond.")
+    return Response(
+        content=row[0],
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=2592000"},
+    )
 
 @router.get("/{token}/forfaits")
 @limiter.limit("60/minute")
