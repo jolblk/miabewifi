@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Ticket } from 'lucide-react';
 import { useHotspotDashboard } from '../../hooks/useHotspotDashboard';
 import { confirmDialog } from '../../utils/confirm';
@@ -25,7 +25,7 @@ const TABS = [
 
 // Page « Tickets hotspots » : chiffres clés, vente rapide, création guidée,
 // et quatre onglets pour séparer le quotidien des réglages.
-export default function HotspotTickets({ onGoToRouters, initialTab }) {
+export default function HotspotTickets({ onGoToRouters, initialTab, initialRequest, onRequestHandled }) {
     const data = useHotspotDashboard();
     const {
         routers, selectedRouterId, setSelectedRouterId, batches, profiles, settings, loading, error,
@@ -41,6 +41,25 @@ export default function HotspotTickets({ onGoToRouters, initialTab }) {
     const [forfaitEdit, setForfaitEdit] = useState(undefined); // { profile, setting } | {} pour un nouveau
 
     const groups = useMemo(() => groupBatches(batches, profiles), [batches, profiles]);
+
+    // Demande venue d'un raccourci (tableau de bord) : choisir un routeur, puis ouvrir la vente
+    // ou la création de tickets une fois les données de ce routeur chargées.
+    const [pendingRequest, setPendingRequest] = useState(initialRequest || null);
+    useEffect(() => {
+        if (!pendingRequest || routers.length === 0) return;
+        const wanted = pendingRequest.routerId && routers.some((r) => r.id === pendingRequest.routerId)
+            ? pendingRequest.routerId
+            : selectedRouterId;
+        if (wanted && wanted !== selectedRouterId) {
+            setSelectedRouterId(wanted);
+            return;
+        }
+        if (loading || !settings) return;
+        if (pendingRequest.action === 'vendre') setSellKey(null);
+        if (pendingRequest.action === 'creer') setWizardProfile(pendingRequest.forfait || null);
+        setPendingRequest(null);
+        if (onRequestHandled) onRequestHandled();
+    }, [pendingRequest, routers, selectedRouterId, setSelectedRouterId, loading, settings, onRequestHandled]);
 
     const stats = useMemo(() => {
         const now = new Date();

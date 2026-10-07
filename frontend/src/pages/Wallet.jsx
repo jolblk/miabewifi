@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Clock, Download, Radio, Ticket } from 'lucide-react';
 import { useWalletData } from '../hooks/useWalletData';
 import { WithdrawModal, RechargeModal } from './WalletForms';
@@ -58,6 +58,14 @@ export default function Wallet() {
         recharger, retirer, telechargerReleve,
     } = useWalletData();
     const [modal, setModal] = useState(null); // 'retrait' | 'recharge'
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Raccourci « Retirer » du tableau de bord : ouvre le retrait dès que le solde est connu.
+    useEffect(() => {
+        if (searchParams.get('action') !== 'retirer' || solde === null) return;
+        if (solde > 0) setModal('retrait');
+        setSearchParams({}, { replace: true });
+    }, [searchParams, solde, setSearchParams]);
     const [filter, setFilter] = useState('all');
     const [shown, setShown] = useState(PAGE);
     const [downloadError, setDownloadError] = useState('');

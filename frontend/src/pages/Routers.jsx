@@ -176,6 +176,16 @@ export default function Routers() {
                 <HotspotTickets
                     onGoToRouters={() => setActiveTab('routers')}
                     initialTab={searchParams.get('vue') === 'direct' ? 'live' : undefined}
+                    initialRequest={
+                        searchParams.get('action') || searchParams.get('routeur')
+                            ? {
+                                action: searchParams.get('action'),
+                                routerId: Number(searchParams.get('routeur')) || null,
+                                forfait: searchParams.get('forfait'),
+                            }
+                            : null
+                    }
+                    onRequestHandled={() => navigate('/tickets', { replace: true })}
                 />
             )}
 
