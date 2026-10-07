@@ -3,7 +3,7 @@ import '../pages/admin/Admin.css';
 
 const adminTabs = [
     { to: '/admin', label: "Vue d'ensemble" },
-    { to: '/admin/users', label: 'Utilisateurs' },
+    { to: '/admin/users', label: 'Revendeurs' },
     { to: '/admin/routers', label: 'Routeurs' },
     { to: '/admin/transactions', label: 'Transactions' },
 ];

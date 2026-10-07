@@ -19,7 +19,7 @@ export const mobileNavItems = [
 
 export const adminNavItems = [
     { to: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
-    { to: '/admin/users', label: 'Utilisateurs', icon: Users },
-    { to: '/admin/routers', label: 'Tous les routeurs', icon: Radio },
+    { to: '/admin/users', label: 'Revendeurs', icon: Users },
+    { to: '/admin/routers', label: 'Routeurs', icon: Radio },
     { to: '/admin/transactions', label: 'Transactions', icon: CreditCard },
 ];

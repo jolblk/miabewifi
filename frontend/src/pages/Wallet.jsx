@@ -132,6 +132,9 @@ export default function Wallet() {
                             <div className="wl-line"><span>Recharges</span><b className="wl-in">{signed(resume.recharges)}</b></div>
                             <div className="wl-line"><span>Abonnements payés</span><b>{signed(-resume.abonnements)}</b></div>
                             <div className="wl-line"><span>Retraits</span><b>{signed(-resume.retraits)}</b></div>
+                            {resume.ajustements ? (
+                                <div className="wl-line"><span>Corrections de solde</span><b className={resume.ajustements > 0 ? 'wl-in' : ''}>{signed(resume.ajustements)}</b></div>
+                            ) : null}
                         </>
                     ) : (
                         <p className="empty-hint">Chargement du bilan…</p>

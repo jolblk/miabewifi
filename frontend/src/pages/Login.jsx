@@ -50,8 +50,8 @@ export default function Login() {
                 {error && <div className="login-error">{error}</div>}
 
                 <div className="login-field">
-                    <label htmlFor="email">Email</label>
-                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Votre email" />
+                    <label htmlFor="email">Email ou identifiant</label>
+                    <input id="email" type="text" autoComplete="username" autoCapitalize="none" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Votre email" />
                 </div>
 
                 <div className="login-field">

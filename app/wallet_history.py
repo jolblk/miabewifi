@@ -8,6 +8,7 @@ TYPE_LABELS = {
     "recharge": "Recharge",
     "retrait": "Retrait",
     "debit": "Abonnement",
+    "ajustement": "Correction de solde",
 }
 
 NETWORK_LABELS = {"FLOOZ": "Flooz", "TMONEY": "T-Money"}
@@ -39,7 +40,10 @@ def network_label(methode: str | None) -> str:
 
 
 def signed_amount(tx_type: str, montant: int) -> int:
-    """Montant vu du solde : positif s'il entre, négatif s'il sort."""
+    """Montant vu du solde : positif s'il entre, négatif s'il sort.
+    Une correction de solde est déjà enregistrée avec son signe."""
+    if tx_type == "ajustement":
+        return montant
     return montant if tx_type in ("vente", "recharge") else -montant
 
 
@@ -77,7 +81,11 @@ def describe(tx, *, sale=None, purchase=None, forfait: str | None = None, router
         titre = f"Recharge {network_label(tx.methode)}".strip()
         detail = " · ".join(p for p in [mask_phone(phone), STATUS_LABELS.get((tx_type, tx.statut), "")] if p)
     elif tx_type == "debit":
-        titre = "Abonnement" + (f" · {router_name}" if router_name else "")
+        prefix = {"OFFERT": "Abonnement offert", "ARRET": "Abonnement arrêté"}.get(tx.methode, "Abonnement")
+        titre = prefix + (f" · {router_name}" if router_name else "")
+        detail = getattr(tx, "note", None) or ""
+    elif tx_type == "ajustement":
+        detail = getattr(tx, "note", None) or ""
     return {
         "id": tx.id,
         "type": tx_type,
@@ -107,7 +115,7 @@ def month_bounds(month: str | None, now: datetime | None = None) -> tuple[dateti
 
 def month_summary(rows) -> dict:
     """Bilan à partir de tuples (type, statut, montant, frais_de_la_vente_ou_None)."""
-    summary = {"ventes": 0, "frais": 0, "recharges": 0, "abonnements": 0, "retraits": 0}
+    summary = {"ventes": 0, "frais": 0, "recharges": 0, "abonnements": 0, "retraits": 0, "ajustements": 0}
     for tx_type, statut, montant, frais in rows:
         if not counts_in_balance(tx_type, statut):
             continue
@@ -120,5 +128,10 @@ def month_summary(rows) -> dict:
             summary["abonnements"] += montant
         elif tx_type == "retrait":
             summary["retraits"] += montant
-    summary["net"] = summary["ventes"] - summary["frais"] + summary["recharges"] - summary["abonnements"] - summary["retraits"]
+        elif tx_type == "ajustement":
+            summary["ajustements"] += montant
+    summary["net"] = (
+        summary["ventes"] - summary["frais"] + summary["recharges"] - summary["abonnements"]
+        - summary["retraits"] + summary["ajustements"]
+    )
     return summary

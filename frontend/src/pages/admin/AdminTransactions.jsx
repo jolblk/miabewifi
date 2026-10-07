@@ -1,58 +1,73 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useSearch } from '../../context/SearchContext';
 import { stripAccents } from '../../utils/normalizeText';
 import { confirmDialog } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errorMessage';
+import '../Dashboard.css';
 import './Admin.css';
 import { formatAmount, formatDateTime } from '../../utils/format';
 
-const statutClass = { en_attente: 'badge-warning', confirme: 'badge-success', a_verifier: 'badge-warning', echoue: 'badge-danger' };
-const statutLabel = { en_attente: 'En attente', confirme: 'Confirmé', a_verifier: 'À vérifier', echoue: 'Échoué' };
-const typeLabel = { recharge: 'Recharge', vente: 'Vente de ticket', debit: 'Pack activé', retrait: 'Retrait' };
+const TYPES = [
+    { value: '', label: 'Tous les types' },
+    { value: 'vente', label: 'Ventes en ligne' },
+    { value: 'retrait', label: 'Retraits' },
+    { value: 'recharge', label: 'Recharges' },
+    { value: 'debit', label: 'Abonnements' },
+    { value: 'ajustement', label: 'Corrections de solde' },
+];
+const STATUTS = [
+    { value: '', label: 'Tous les statuts' },
+    { value: 'a_verifier', label: 'À vérifier' },
+    { value: 'en_attente', label: 'En attente' },
+    { value: 'confirme', label: 'Confirmés' },
+    { value: 'echoue', label: 'Échoués' },
+];
+const BADGES = {
+    a_verifier: { label: 'À vérifier', cls: 'badge-warning' },
+    en_attente: { label: 'En attente', cls: 'badge-warning' },
+    echoue: { label: 'Échoué', cls: 'badge-danger' },
+};
+
+function signed(value) {
+    return `${value >= 0 ? '+' : '−'} ${formatAmount(Math.abs(value))} F`;
+}
 
 export default function AdminTransactions() {
-    const [transactions, setTransactions] = useState([]);
-    const [toCheck, setToCheck] = useState([]);
+    const [searchParams] = useSearchParams();
+    const [type, setType] = useState('');
+    const [statut, setStatut] = useState(searchParams.get('statut') || '');
+    const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [actionMsg, setActionMsg] = useState('');
+    const [info, setInfo] = useState('');
     const [busyId, setBusyId] = useState(null);
     const { query } = useSearch();
 
     const load = useCallback(() => {
-        return Promise.all([
-            api.get('/admin/transactions'),
-            api.get('/admin/retraits-a-verifier'),
-        ])
-            .then(([txRes, checkRes]) => {
-                setTransactions(txRes.data);
-                setToCheck(checkRes.data);
-            })
-            .catch(() => setError("Impossible de charger les transactions."))
+        setLoading(true);
+        return api.get('/admin/transactions', { params: { type: type || undefined, statut: statut || undefined, limit: 300 } })
+            .then((res) => setRows(res.data))
+            .catch(() => setError('Impossible de charger les transactions.'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [type, statut]);
 
     useEffect(() => {
         load();
     }, [load]);
 
-    async function resolveWithdrawal(w, action) {
+    async function resolveWithdrawal(t, action) {
         const message = action === 'confirmer'
-            ? `Confirmer que ${formatAmount(w.montant)} FCFA sont bien arrivés chez ${w.user_nom} (référence ${w.identifier}) ? Vérifiez d'abord dans le tableau de bord PayGate.`
-            : `Rendre ${formatAmount(w.montant)} FCFA au solde de ${w.user_nom} (référence ${w.identifier}) ? À faire UNIQUEMENT si PayGate confirme que l'argent n'est pas parti.`;
-        const ok = await confirmDialog(message, {
-            confirmLabel: action === 'confirmer' ? 'Confirmer le retrait' : 'Rembourser',
-            danger: action === 'rembourser',
-        });
-        if (!ok) return;
-
-        setBusyId(w.id);
+            ? `Confirmer que ${formatAmount(t.montant)} F sont bien arrivés chez ${t.user_nom} (référence ${t.identifier}) ? Vérifiez d'abord dans le tableau de bord PayGate.`
+            : `Rendre ${formatAmount(t.montant)} F au solde de ${t.user_nom} (référence ${t.identifier}) ? Seulement si PayGate confirme que l'argent n'est pas parti.`;
+        if (!(await confirmDialog(message, { confirmLabel: action === 'confirmer' ? 'Argent arrivé' : 'Rembourser', danger: action === 'rembourser' }))) return;
+        setBusyId(t.id);
         setError('');
-        setActionMsg('');
+        setInfo('');
         try {
-            const res = await api.post(`/admin/retraits/${w.id}/${action}`);
-            setActionMsg(res.data.message);
+            const res = await api.post(`/admin/retraits/${t.id}/${action}`);
+            setInfo(res.data.message);
             await load();
         } catch (err) {
             setError(getErrorMessage(err, "L'action n'a pas pu être effectuée."));
@@ -61,104 +76,54 @@ export default function AdminTransactions() {
         }
     }
 
-    const normalizedQuery = stripAccents(query.trim());
-    const filteredTransactions = normalizedQuery
-        ? transactions.filter((t) => stripAccents(`${t.user_nom} ${t.methode} ${t.type} ${t.identifier || ''}`).includes(normalizedQuery))
-        : transactions;
+    const q = stripAccents(query.trim());
+    const visible = rows.filter((t) => !q || stripAccents(`${t.user_nom} ${t.identifier} ${t.titre} ${t.detail || ''} ${t.note || ''}`).includes(q));
 
     return (
-        <div>
+        <div className="db-page">
             <h1 className="page-title">Transactions</h1>
-
+            <div className="ad-filters">
+                <select className="text-input" value={type} onChange={(e) => setType(e.target.value)} aria-label="Type">
+                    {TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <select className="text-input" value={statut} onChange={(e) => setStatut(e.target.value)} aria-label="Statut">
+                    {STATUTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+            </div>
+            {statut === 'a_verifier' && (
+                <p className="empty-hint ad-no-margin">
+                    PayGate n'a pas donné de réponse claire pour ces retraits. Cherchez la référence dans le tableau de bord PayGate :
+                    si l'argent est arrivé, cliquez sur « Argent arrivé », sinon sur « Rembourser ».
+                </p>
+            )}
             {error && <p className="error-text">{error}</p>}
-            {actionMsg && <p className="greeting">{actionMsg}</p>}
-            {loading && <p className="empty-hint">Chargement...</p>}
+            {info && <p className="success-text">{info}</p>}
+            {loading && <p className="empty-hint">Chargement…</p>}
+            {!loading && visible.length === 0 && <p className="empty-hint">Aucune transaction ne correspond.</p>}
 
-            {!loading && toCheck.length > 0 && (
-                <div className="section-card admin-table-wrap">
-                    <h2>Retraits à vérifier ({toCheck.length})</h2>
-                    <p className="greeting">
-                        PayGate n'a pas donné de réponse claire pour ces retraits. Cherchez la référence dans le
-                        tableau de bord PayGate : si l'argent est arrivé, confirmez ; sinon, remboursez.
-                    </p>
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Utilisateur</th>
-                                <th>Référence</th>
-                                <th>Méthode</th>
-                                <th>Montant</th>
-                                <th>Date</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {toCheck.map((w) => (
-                                <tr key={w.id}>
-                                    <td>{w.user_nom}<br /><small>{w.user_email}</small></td>
-                                    <td><code>{w.identifier}</code></td>
-                                    <td>{w.methode}</td>
-                                    <td>{formatAmount(w.montant)} FCFA</td>
-                                    <td>{formatDateTime(w.created_at)}</td>
-                                    <td>
-                                        <button
-                                            className="btn-primary"
-                                            disabled={busyId === w.id}
-                                            onClick={() => resolveWithdrawal(w, 'confirmer')}
-                                        >
-                                            Argent arrivé
-                                        </button>{' '}
-                                        <button
-                                            className="btn-secondary"
-                                            disabled={busyId === w.id}
-                                            onClick={() => resolveWithdrawal(w, 'rembourser')}
-                                        >
-                                            Rembourser
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            <p className="greeting">100 dernières transactions.</p>
-
-            {!loading && normalizedQuery && filteredTransactions.length === 0 && (
-                <p className="search-empty-msg">Aucun résultat pour « {query} ».</p>
-            )}
-
-            {!loading && (
-                <div className="section-card admin-table-wrap">
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Utilisateur</th>
-                                <th>Type</th>
-                                <th>Méthode</th>
-                                <th>Montant</th>
-                                <th>Statut</th>
-                                <th>Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredTransactions.map((t) => (
-                                <tr key={t.id}>
-                                    <td>{t.user_nom}</td>
-                                    <td>{typeLabel[t.type] || t.type}</td>
-                                    <td>{t.methode}</td>
-                                    <td>{formatAmount(t.montant)} FCFA</td>
-                                    <td>
-                                        <span className={`badge ${statutClass[t.statut] || 'badge-warning'}`}>
-                                            {statutLabel[t.statut] || t.statut}
-                                        </span>
-                                    </td>
-                                    <td>{formatDateTime(t.created_at)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {visible.length > 0 && (
+                <div className="section-card ad-list">
+                    {visible.map((t) => {
+                        const badge = BADGES[t.statut];
+                        return (
+                            <div key={t.id} className="ad-row">
+                                <div className="ad-row-text">
+                                    <div>{t.titre} {badge && <span className={`badge ${badge.cls}`}>{badge.label}</span>}</div>
+                                    <span>
+                                        {t.user_nom} · {formatDateTime(t.created_at)}{t.detail ? ` · ${t.detail}` : ''}
+                                    </span>
+                                    <span className="mono ad-ref">{t.identifier}</span>
+                                </div>
+                                <b className={t.montant_signe > 0 ? 'wl-in' : ''}>{signed(t.montant_signe)}</b>
+                                {t.type === 'retrait' && t.statut === 'a_verifier' && (
+                                    <div className="ad-actions">
+                                        <button type="button" className="btn-primary db-small" disabled={busyId === t.id} onClick={() => resolveWithdrawal(t, 'confirmer')}>Argent arrivé</button>
+                                        <button type="button" className="btn-secondary db-small" disabled={busyId === t.id} onClick={() => resolveWithdrawal(t, 'rembourser')}>Rembourser</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>

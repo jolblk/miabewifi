@@ -78,6 +78,7 @@ class Transaction(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     type = Column(String, default="recharge")  # "recharge", "debit" ou "retrait"
     telephone = Column(String, nullable=True)  # numéro mobile money d'une recharge ou d'un retrait
+    note = Column(String, nullable=True)  # motif d'un abonnement offert ou d'une correction de solde (admin)
 
 class VoucherBatch(Base):
     __tablename__ = "voucher_batches"

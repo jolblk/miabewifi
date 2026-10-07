@@ -54,7 +54,17 @@ def test_bilan_du_mois():
         ("retrait", "a_verifier", 5000, None),   # montant réservé : compté
         ("retrait", "echoue", 2000, None),       # rendu au solde : ignoré
     ])
-    assert summary == {"ventes": 400, "frais": 4, "recharges": 5000, "abonnements": 6000, "retraits": 5000, "net": -5604}
+    assert summary == {"ventes": 400, "frais": 4, "recharges": 5000, "abonnements": 6000, "retraits": 5000, "ajustements": 0, "net": -5604}
+
+
+def test_abonnement_offert_et_correction_de_solde():
+    offert = wh.describe(_tx(type="debit", methode="OFFERT", montant=0, note="Geste commercial (par Admin)"), router_name="Boutique Kodjo")
+    assert offert["titre"] == "Abonnement offert · Boutique Kodjo" and offert["detail"] == "Geste commercial (par Admin)"
+    assert offert["montant_signe"] == 0
+    correction = wh.describe(_tx(type="ajustement", methode="ADMIN", montant=-500, note="Doublon"))
+    assert correction["titre"] == "Correction de solde" and correction["montant_signe"] == -500
+    summary = wh.month_summary([("ajustement", "confirme", -500, None), ("ajustement", "confirme", 2000, None)])
+    assert summary["ajustements"] == 1500 and summary["net"] == 1500
 
 
 def test_bornes_du_mois():
