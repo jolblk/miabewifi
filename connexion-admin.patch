@@ -1,0 +1,15 @@
+diff --git a/app/schemas.py b/app/schemas.py
+index cd72e5d..c15dd30 100644
+--- a/app/schemas.py
++++ b/app/schemas.py
+@@ -14,7 +14,9 @@ class UserCreate(BaseModel):
+ 
+ class UserOut(BaseModel):
+     id: int
+-    email: EmailStr
++    # Pas EmailStr ici : un compte administrateur peut avoir un simple identifiant (ex. « admin »).
++    # L'inscription, elle, exige toujours une vraie adresse e-mail (UserCreate).
++    email: str
+     nom: str
+     solde: int
+     role: str
