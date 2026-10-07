@@ -1,4 +1,17 @@
+import json
+
 import httpx
+
+
+def decode_json(content: bytes):
+    """Lit une réponse JSON du routeur, même si elle contient des octets qui ne sont pas du texte.
+
+    MikroTik joint parfois le contenu brut de petits fichiers (images, icônes) à ses réponses :
+    une lecture stricte en UTF-8 échouerait alors sur toute l'opération. Les octets illisibles
+    sont simplement remplacés, ce qui ne gêne que l'affichage de ces contenus binaires."""
+    if not content:
+        return None
+    return json.loads(content.decode("utf-8", errors="replace"), strict=False)
 
 
 class RouterOSError(Exception):
@@ -37,26 +50,26 @@ class RouterOSClient:
             await self._http.aclose()
             self._http = None
 
-    async def _request(self, method: str, path: str, data: dict | None = None):
+    async def _request(self, method: str, path: str, data: dict | None = None, params: dict | None = None):
         url = f"{self.base_url}/{path}"
         if self._http is not None:
-            response = await self._http.request(method, url, json=data)
+            response = await self._http.request(method, url, json=data, params=params)
         else:
             async with httpx.AsyncClient(verify=False, timeout=10, auth=self.auth) as client:
-                response = await client.request(method, url, json=data)
+                response = await client.request(method, url, json=data, params=params)
 
         if response.status_code >= 400:
             try:
-                body = response.json()
+                body = decode_json(response.content)
                 message = body.get("detail") or body.get("message") or response.text
             except Exception:
                 message = response.text
             raise RouterOSError(response.status_code, message)
 
-        return response.json() if response.content else None
+        return decode_json(response.content)
 
-    async def get(self, path: str):
-        return await self._request("GET", path)
+    async def get(self, path: str, params: dict | None = None):
+        return await self._request("GET", path, params=params)
 
     async def put(self, path: str, data: dict):
         """Crée une entrée (méthode PUT de l'API REST RouterOS)."""
@@ -136,7 +149,9 @@ class RouterOSClient:
 
     async def write_file(self, name: str, contents: str):
         """Crée ou remplace un fichier texte sur le routeur (ex: page de connexion HotSpot)."""
-        files = await self.get("file")
+        # On ne demande QUE ce fichier, et sans son contenu : la liste complète des fichiers du
+        # routeur contient le contenu brut des petites images, inutile et parfois illisible.
+        files = await self.get("file", params={"name": name, ".proplist": ".id,name"}) or []
         existing = next((f for f in files if f.get("name") == name), None)
         if existing:
             return await self.patch(f"file/{existing['.id']}", {"contents": contents})
