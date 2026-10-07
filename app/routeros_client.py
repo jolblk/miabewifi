@@ -51,6 +51,22 @@ class RouterOSClient:
             self._http = None
 
     async def _request(self, method: str, path: str, data: dict | None = None, params: dict | None = None):
+        try:
+            return await self._send(method, path, data, params)
+        except RouterOSError as e:
+            # Le routeur a coupé la session (« Session closed ») : on réessaie une fois sur une
+            # connexion neuve. Jamais pour une création (PUT), qui pourrait se faire en double.
+            if method == "PUT" or "session closed" not in str(e.message).lower():
+                raise
+        await self._reconnect()
+        return await self._send(method, path, data, params)
+
+    async def _reconnect(self):
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = httpx.AsyncClient(verify=False, timeout=10, auth=self.auth)
+
+    async def _send(self, method: str, path: str, data: dict | None, params: dict | None):
         url = f"{self.base_url}/{path}"
         if self._http is not None:
             response = await self._http.request(method, url, json=data, params=params)
@@ -156,3 +172,8 @@ class RouterOSClient:
         if existing:
             return await self.patch(f"file/{existing['.id']}", {"contents": contents})
         return await self.put("file", {"name": name, "contents": contents})
+
+    async def fetch_file(self, url: str, dst_path: str):
+        """Demande au routeur de télécharger lui-même un fichier (commande /tool/fetch).
+        Méthode de secours quand l'écriture directe par l'API échoue sur certains routeurs."""
+        return await self.post("tool/fetch", {"url": url, "dst-path": dst_path, "check-certificate": "no"})

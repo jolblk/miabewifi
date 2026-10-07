@@ -79,6 +79,24 @@ def _batch_label(batch: models.VoucherBatch) -> str:
         return f"{batch.validite_jours} j"
     return batch.profile_name
 
+@router.get("/{token}/pages/{name}")
+@limiter.limit("60/minute")
+def get_hotspot_page(request: Request, token: str, name: str, db: Session = Depends(get_db)):
+    """Page HotSpot personnalisée de ce routeur, téléchargée par le routeur lui-même quand
+    l'écriture directe par l'API échoue. Ne contient rien de plus que ce que voit tout
+    visiteur du Wi-Fi."""
+    from app.mikrotik_scripts import HOTSPOT_PAGES, render_hotspot_pages
+
+    if name not in HOTSPOT_PAGES:
+        raise HTTPException(status_code=404, detail="Page inconnue.")
+    db_router = _get_router_by_token(token, db)
+    return Response(
+        content=render_hotspot_pages(db_router)[name].encode("utf-8"),
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/{token}/background.jpg")
 @limiter.limit("120/minute")
 def get_background(request: Request, token: str, db: Session = Depends(get_db)):

@@ -48,3 +48,42 @@ def test_creation_si_le_fichier_n_existe_pas():
     asyncio.run(router.write_file("hotspot/status.html", "<html></html>"))
     assert router.calls[1][:2] == ("PUT", "file")
     assert router.calls[1][3] == {"name": "hotspot/status.html", "contents": "<html></html>"}
+
+
+# ---- session coupée par le routeur -----------------------------------------------
+from app.routeros_client import RouterOSError
+
+
+class _FlakyRouter(RouterOSClient):
+    """Coupe la session à la première requête, puis répond normalement."""
+
+    def __init__(self):
+        super().__init__("10.10.0.5", "u", "p")
+        self.sent = []
+        self.reconnects = 0
+
+    async def _send(self, method, path, data, params):
+        self.sent.append(method)
+        if len(self.sent) == 1:
+            raise RouterOSError(400, "Session closed")
+        return {"ok": True}
+
+    async def _reconnect(self):
+        self.reconnects += 1
+
+
+def test_nouvelle_tentative_si_session_coupee():
+    router = _FlakyRouter()
+    assert asyncio.run(router._request("PATCH", "file/*1", {"contents": "x"})) == {"ok": True}
+    assert router.sent == ["PATCH", "PATCH"] and router.reconnects == 1
+
+
+def test_pas_de_nouvelle_tentative_pour_une_creation():
+    router = _FlakyRouter()
+    try:
+        asyncio.run(router._request("PUT", "file", {"name": "a"}))
+    except RouterOSError:
+        pass
+    else:
+        raise AssertionError("l'erreur aurait dû remonter")
+    assert router.sent == ["PUT"]

@@ -170,15 +170,35 @@ async def hotspot_html_directories(client) -> list[str]:
     return directories or ["hotspot"]
 
 
+def hotspot_page_url(public_token: str, name: str) -> str:
+    """Adresse publique d'une page HotSpot déjà personnalisée pour ce routeur (méthode de secours)."""
+    return f"{PUBLIC_API_BASE_URL}/public/hotspot/{public_token}/pages/{name}"
+
+
 async def install_hotspot_pages(client, db_router) -> list[str]:
     """Écrit les pages HotSpot sur le routeur, dans le(s) dossier(s) qu'il utilise vraiment.
-    Renvoie les chemins écrits. Les autres fichiers du dossier (images, etc.) ne sont pas touchés."""
+    Renvoie les chemins écrits. Les autres fichiers du dossier (images, etc.) ne sont pas touchés.
+
+    Si l'écriture directe d'une page échoue (certains routeurs coupent la session), le routeur
+    est invité à télécharger lui-même la page depuis notre serveur. Si les deux échouent, l'erreur
+    indique la page concernée et les deux causes."""
     pages = render_hotspot_pages(db_router)
     written = []
     for directory in await hotspot_html_directories(client):
         for name, contents in pages.items():
             path = f"{directory}/{name}"
-            await client.write_file(path, contents)
+            try:
+                await client.write_file(path, contents)
+            except Exception as direct_error:
+                if not db_router.public_token:
+                    raise RuntimeError(f"{path} : {direct_error}") from direct_error
+                try:
+                    await client.fetch_file(hotspot_page_url(db_router.public_token, name), path)
+                except Exception as fetch_error:
+                    raise RuntimeError(
+                        f"{path} : écriture directe impossible ({direct_error}), "
+                        f"téléchargement par le routeur impossible ({fetch_error})"
+                    ) from fetch_error
             written.append(path)
     return written
 
