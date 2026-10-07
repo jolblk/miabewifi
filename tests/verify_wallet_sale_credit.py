@@ -31,7 +31,9 @@ models.Transaction = make_model("Transaction", ["id", "identifier", "statut"])
 models.HotspotPurchase = make_model("HotspotPurchase", ["id", "statut", "identifier"])
 
 stub("fastapi", APIRouter=lambda **k: MagicMock(post=lambda *a, **k: (lambda f: f), get=lambda *a, **k: (lambda f: f)),
-     Depends=lambda x=None: None, HTTPException=Exception, Request=object)
+     Depends=lambda x=None: None, HTTPException=Exception, Request=object, Query=lambda *a, **k: None)
+stub("fastapi.responses", Response=object)
+stub("app.security", verify_password=lambda plain, hashed: True)
 stub("sqlalchemy"); stub("sqlalchemy.orm", Session=object)
 stub("slowapi", Limiter=lambda **k: MagicMock(limit=lambda *a, **k: (lambda f: f)))
 stub("slowapi.util", get_remote_address=lambda r: "x")

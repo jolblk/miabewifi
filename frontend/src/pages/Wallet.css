@@ -83,3 +83,46 @@
 .tx-amount.negative {
     color: var(--danger);
 }
+/* --- Portefeuille (refonte) : préfixe wl- --- */
+.wl-page { display: flex; flex-direction: column; gap: 14px; }
+.wl-top { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; }
+.wl-label { font-size: 13px; color: var(--text-muted); }
+.wl-balance { font-family: var(--font-display); font-size: 34px; font-weight: 600; margin: 4px 0; }
+.wl-balance small { font-size: 18px; color: var(--text-muted); }
+.wl-reserved { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--warning); background: rgba(180, 83, 9, 0.12); padding: 3px 10px; border-radius: 999px; }
+.wl-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.wl-month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.wl-month .wl-label { font-weight: 600; color: var(--text); }
+.wl-line { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; font-size: 14px; border-bottom: 1px solid var(--border); }
+.wl-line:last-child { border-bottom: 0; }
+.wl-in { color: var(--success); }
+.wl-history-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.wl-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.wl-chip { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.wl-chip.is-on { border-color: var(--violet); background: var(--violet-glow); color: var(--violet); font-weight: 600; }
+.wl-small { padding: 6px 12px !important; font-size: 13px !important; }
+.wl-day { font-size: 12px; color: var(--text-muted); margin: 14px 0 2px; font-weight: 600; }
+.wl-tx { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.wl-tx-icon { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--bg-input); color: var(--text-muted); }
+.wl-tx-icon.is-in { background: rgba(21, 128, 61, 0.12); color: var(--success); }
+.wl-tx-text { flex: 1; min-width: 0; }
+.wl-tx-detail { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.wl-tx-amount { white-space: nowrap; }
+.wl-tx-amount.is-void { color: var(--text-muted); text-decoration: line-through; }
+.wl-badge { margin-left: 8px; font-size: 11px !important; padding: 1px 8px !important; }
+.wl-more { margin: 14px auto 0; display: flex; }
+.wl-mt { margin-top: 14px; }
+.wl-row { display: flex; gap: 8px; margin-top: 8px; }
+.wl-row .text-input { width: 100%; }
+.wl-network { max-width: 120px; }
+.wl-amount { width: 100%; max-width: 200px; margin-top: 8px; }
+.wl-summary { background: var(--bg-input); border-radius: var(--radius); padding: 10px 12px; font-size: 14px; margin-top: 12px; }
+.wl-summary span { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.wl-result { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--success); margin: 0 0 10px; }
+.wl-result.is-warning { color: var(--warning); }
+#wl-password { width: 100%; }
+
+@media (max-width: 720px) {
+    .wl-top { grid-template-columns: 1fr; }
+    .wl-actions > button { flex: 1 1 auto; justify-content: center; }
+}

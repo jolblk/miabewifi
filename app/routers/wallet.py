@@ -1,8 +1,11 @@
+import csv
+import io
 import logging
 import time
 import httpx
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -13,6 +16,8 @@ from app.config import PAYGATE_AUTH_TOKEN, HOTSPOT_SALE_FEE_RATE
 from app.fees import compute_sale_split
 from app.payouts import SUCCES, ECHEC, classify_disburse_response
 from app.alerts import alert_admins
+from app.security import verify_password
+from app import wallet_history
 
 from app.limiter import limiter
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
@@ -81,6 +86,7 @@ async def recharger(
         methode=data.network,
         statut="en_attente",
         identifier=identifier,
+        telephone=data.phone_number,
     )
     db.add(transaction)
     db.commit()
@@ -98,6 +104,11 @@ async def retirer(
 ):
     if data.montant <= 0:
         raise HTTPException(status_code=400, detail="Montant invalide.")
+
+    # Confirmation par mot de passe : un compte resté ouvert ou volé ne peut pas être vidé
+    # d'un simple clic. (Limité à 5 essais par minute par le décorateur ci-dessus.)
+    if not verify_password(data.password, current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Mot de passe incorrect. Le retrait n'a pas été effectué.")
 
     reference = f"miabewifi-retrait-{current_user.id}-{int(time.time() * 1000)}"
 
@@ -120,6 +131,7 @@ async def retirer(
         statut="en_attente",
         identifier=reference,
         type="retrait",
+        telephone=data.phone_number,
     )
     db.add(transaction)
     db.commit()
@@ -366,3 +378,149 @@ def get_transactions(
         }
         for t in transactions
     ]
+
+
+# --- Historique détaillé, bilan du mois, relevé, numéros déjà utilisés ---------------------
+
+def _history_rows(db: Session, user_id: int, start: datetime | None = None, end: datetime | None = None):
+    """Transactions du compte, avec le détail des ventes en ligne (forfait, frais, numéro)
+    et le nom du routeur des abonnements. Du plus récent au plus ancien."""
+    query = db.query(models.Transaction).filter(models.Transaction.user_id == user_id)
+    if start is not None:
+        query = query.filter(models.Transaction.created_at >= start, models.Transaction.created_at < end)
+    transactions = query.order_by(models.Transaction.created_at.desc(), models.Transaction.id.desc()).all()
+
+    # Ventes en ligne : la ligne de crédit s'appelle « <achat>-credit ».
+    sale_ids = [t.identifier[: -len("-credit")] for t in transactions if t.type == "vente" and t.identifier.endswith("-credit")]
+    purchases = {}
+    if sale_ids:
+        for purchase in db.query(models.HotspotPurchase).filter(models.HotspotPurchase.identifier.in_(sale_ids)).all():
+            purchases[purchase.identifier] = purchase
+    voucher_ids = [p.voucher_id for p in purchases.values() if p.voucher_id]
+    sales = {}
+    if voucher_ids:
+        for sale in db.query(models.Sale).filter(models.Sale.voucher_id.in_(voucher_ids)).all():
+            sales[sale.voucher_id] = sale
+    batch_ids = {p.batch_id for p in purchases.values()}
+    labels = {}
+    if batch_ids:
+        from app.routers.hotspot_public import _batch_label
+        for batch in db.query(models.VoucherBatch).filter(models.VoucherBatch.id.in_(batch_ids)).all():
+            labels[batch.id] = _batch_label(batch)
+
+    # Abonnements : la ligne s'appelle « pack-<routeur>-<horodatage> ».
+    router_ids = set()
+    for t in transactions:
+        if t.type == "debit" and t.identifier.startswith("pack-"):
+            part = t.identifier.split("-")[1]
+            if part.isdigit():
+                router_ids.add(int(part))
+    router_names = {}
+    if router_ids:
+        for r in db.query(models.Router).filter(models.Router.id.in_(router_ids), models.Router.owner_id == user_id).all():
+            router_names[r.id] = r.nom
+
+    rows = []
+    for t in transactions:
+        purchase = sale = forfait = router_name = None
+        if t.type == "vente" and t.identifier.endswith("-credit"):
+            purchase = purchases.get(t.identifier[: -len("-credit")])
+            if purchase is not None:
+                sale = sales.get(purchase.voucher_id)
+                forfait = labels.get(purchase.batch_id)
+        if t.type == "debit" and t.identifier.startswith("pack-"):
+            part = t.identifier.split("-")[1]
+            router_name = router_names.get(int(part)) if part.isdigit() else None
+        rows.append(wallet_history.describe(t, sale=sale, purchase=purchase, forfait=forfait, router_name=router_name))
+    return rows
+
+
+@router.get("/historique")
+def get_history(
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Historique lisible : libellés en français, numéros masqués, frais des ventes."""
+    return _history_rows(db, current_user.id)[:limit]
+
+
+@router.get("/resume")
+def get_month_summary(
+    mois: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Bilan d'un mois (le mois en cours par défaut) et montant réservé par des retraits
+    en cours de vérification."""
+    try:
+        start, end = wallet_history.month_bounds(mois)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Mois invalide (format attendu : 2026-10).")
+    rows = _history_rows(db, current_user.id, start, end)
+    summary = wallet_history.month_summary((r["type"], r["statut"], r["montant"], r["frais"]) for r in rows)
+    reserve = sum(
+        t.montant
+        for t in db.query(models.Transaction).filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == "retrait",
+            models.Transaction.statut == "a_verifier",
+        ).all()
+    )
+    return {"mois": start.strftime("%Y-%m"), "solde": current_user.solde, "reserve": reserve, **summary}
+
+
+@router.get("/numeros")
+def get_recent_numbers(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Numéros mobile money déjà utilisés pour un retrait ou une recharge réussis (5 au plus),
+    pour les proposer au prochain retrait."""
+    rows = (
+        db.query(models.Transaction.telephone, models.Transaction.methode)
+        .filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.telephone.isnot(None),
+            models.Transaction.type.in_(["retrait", "recharge"]),
+            models.Transaction.statut == "confirme",
+        )
+        .order_by(models.Transaction.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    seen, numbers = set(), []
+    for phone, methode in rows:
+        if phone in seen or methode not in ("FLOOZ", "TMONEY"):
+            continue
+        seen.add(phone)
+        numbers.append({"telephone": phone, "network": methode, "masque": wallet_history.mask_phone(phone)})
+        if len(numbers) == 5:
+            break
+    return numbers
+
+
+@router.get("/releve.csv")
+def download_statement(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Relevé complet au format tableur (séparateur « ; », lisible directement par Excel)."""
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=";")
+    writer.writerow(["Date", "Opération", "Détail", "Statut", "Montant (FCFA)", "Frais (FCFA)"])
+    for r in _history_rows(db, current_user.id):
+        writer.writerow([
+            r["created_at"].strftime("%d/%m/%Y %H:%M") if r["created_at"] else "",
+            r["titre"],
+            r["detail"],
+            r["statut"],
+            r["montant_signe"],
+            r["frais"] or "",
+        ])
+    filename = f"releve-miabewifi-{datetime.utcnow().strftime('%Y-%m-%d')}.csv"
+    return Response(
+        content="\ufeff" + out.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

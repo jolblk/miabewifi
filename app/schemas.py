@@ -87,6 +87,7 @@ class WithdrawRequest(BaseModel):
     phone_number: str
     network: str  # FLOOZ ou TMONEY
     montant: int = Field(gt=0)
+    password: str = Field(min_length=1, max_length=200)  # mot de passe du compte, pour confirmer
 
 
 class SupportMessage(BaseModel):
