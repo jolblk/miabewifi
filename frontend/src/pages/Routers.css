@@ -246,3 +246,28 @@
 .router-details-toggle svg.is-open {
     transform: rotate(180deg);
 }
+
+/* Onglets « Mes routeurs » / « Tickets hotspots » (déplacés depuis l'ancienne page Suivi HotSpot) */
+.hotspot-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.hotspot-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color, #e5e5e5);
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.hotspot-tab-active {
+    background: var(--primary-color, #7c3aed);
+    color: #fff;
+    border-color: var(--primary-color, #7c3aed);
+}

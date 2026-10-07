@@ -9,6 +9,7 @@ import ForfaitsTab from './ForfaitsTab';
 import ForfaitModal from './ForfaitModal';
 import WifiPageTab from './WifiPageTab';
 import SettingsTab from './SettingsTab';
+import LiveTab from './LiveTab';
 import SellTicketModal from './SellTicketModal';
 import CreateTicketsWizard from './CreateTicketsWizard';
 import { errorMessage, groupBatches, isSameDay, sellableProfiles } from './hotspotUtils';
@@ -18,19 +19,20 @@ const TABS = [
     { key: 'tickets', label: 'Mes tickets' },
     { key: 'forfaits', label: 'Forfaits et prix' },
     { key: 'wifi', label: 'Page Wi-Fi' },
+    { key: 'live', label: 'En direct' },
     { key: 'reglages', label: 'Réglages' },
 ];
 
 // Page « Tickets hotspots » : chiffres clés, vente rapide, création guidée,
 // et quatre onglets pour séparer le quotidien des réglages.
-export default function HotspotTickets({ onGoToRouters }) {
+export default function HotspotTickets({ onGoToRouters, initialTab }) {
     const data = useHotspotDashboard();
     const {
         routers, selectedRouterId, setSelectedRouterId, batches, profiles, settings, loading, error,
         routerStatuses, forfaitSettings, sales, connectedClients, currentRateLimit,
     } = data;
 
-    const [tab, setTab] = useState('tickets');
+    const [tab, setTab] = useState(initialTab || 'tickets');
     const [busy, setBusy] = useState(false);
     const [actionError, setActionError] = useState('');
     const [actionInfo, setActionInfo] = useState('');
@@ -135,7 +137,9 @@ export default function HotspotTickets({ onGoToRouters }) {
                 <div className="hs-stat"><span>Tickets disponibles</span><b>{formatAmount(stats.disponibles)}</b></div>
                 <div className="hs-stat"><span>Vendus aujourd'hui</span><b>{formatAmount(stats.vendusAujourdhui)}</b></div>
                 <div className="hs-stat"><span>Recettes du mois</span><b>{formatAmount(stats.recettesMois)} F</b></div>
-                <div className="hs-stat"><span>Clients connectés</span><b>{connectedClients === null ? '—' : connectedClients}</b></div>
+                <button type="button" className="hs-stat hs-stat-btn" onClick={() => { setTab('live'); onMessage('', ''); }} title="Voir les clients connectés">
+                    <span>Clients connectés</span><b>{connectedClients === null ? '—' : connectedClients}</b>
+                </button>
             </div>
 
             <div className="hs-tabs" role="tablist">
@@ -202,6 +206,8 @@ export default function HotspotTickets({ onGoToRouters }) {
                     onRemoveBackground={data.removeBackground}
                 />
             )}
+
+            {tab === 'live' && <LiveTab key={selectedRouterId} routerId={selectedRouterId} />}
 
             {tab === 'reglages' && settings && (
                 <SettingsTab

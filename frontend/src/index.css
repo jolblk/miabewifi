@@ -22,7 +22,7 @@
   --sidebar-width: 240px;
   --radius: 10px;
 
-  /* Alias utilisés par Hotspot.css, HotspotMonitor.css et Dashboard.css */
+  /* Alias utilisés par Hotspot.css, Routers.css et Dashboard.css */
   --border-color: var(--border);
   --primary-color: var(--violet);
   --danger-glow: #fde8e8;

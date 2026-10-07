@@ -12,7 +12,6 @@ import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import Support from './pages/Support';
 import Account from './pages/Account';
-import HotspotMonitor from './pages/HotspotMonitor';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminRouters from './pages/admin/AdminRouters';
@@ -40,7 +39,8 @@ function App() {
             <Route path="/support" element={<Support />} />
             <Route path="/account" element={<Account />} />
             <Route path="/hotspot" element={<Navigate to="/routers" replace />} />
-            <Route path="/hotspot/suivi" element={<HotspotMonitor />} />
+            <Route path="/tickets" element={<Routers />} />
+            <Route path="/hotspot/suivi" element={<Navigate to="/tickets?vue=direct" replace />} />
             <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminOverview />} />

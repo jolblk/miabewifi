@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound, Radio, Ticket } from 'lucide-react';
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
@@ -42,7 +42,12 @@ export default function Routers() {
         ? routers.filter((r) => stripAccents(r.nom).includes(normalizedQuery))
         : routers;
 
-    const [activeTab, setActiveTab] = useState('routers');
+    // L'onglet suit l'adresse : /routers (mes routeurs) ou /tickets (tickets hotspots),
+    // pour que le menu puisse mener directement aux tickets.
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const activeTab = location.pathname.startsWith('/tickets') ? 'tickets' : 'routers';
+    const setActiveTab = (key) => navigate(key === 'tickets' ? '/tickets' : '/routers');
     const [showForm, setShowForm] = useState(false);
     const [nom, setNom] = useState('');
     const [busy, setBusy] = useState(false);
@@ -167,7 +172,12 @@ export default function Routers() {
                 })}
             </div>
 
-            {activeTab === 'tickets' && <HotspotTickets onGoToRouters={() => setActiveTab('routers')} />}
+            {activeTab === 'tickets' && (
+                <HotspotTickets
+                    onGoToRouters={() => setActiveTab('routers')}
+                    initialTab={searchParams.get('vue') === 'direct' ? 'live' : undefined}
+                />
+            )}
 
             {activeTab === 'routers' && (
             <>

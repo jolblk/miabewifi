@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import re
 import secrets
 from datetime import datetime
 
@@ -14,7 +15,9 @@ from app import branding, models, schemas
 from app.crypto import decrypt
 from app.routeros_client import RouterOSClient
 from app.pdf_generator import generate_vouchers_pdf
-from app.mikrotik_scripts import install_hotspot_pages, DEFAULT_RATE_LIMIT, render_login_page, DEFAULT_RATE_LIMIT
+from app.mikrotik_scripts import install_hotspot_pages, DEFAULT_RATE_LIMIT
+from app.hotspot_live import build_live_view, sale_info
+from app.ros_utils import parse_ros_duration
 from app.sync import sync_router
 from app.wireguard import is_router_active
 
@@ -193,6 +196,83 @@ async def list_active_sessions(
             return await client.get_active_sessions()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Impossible de joindre le MikroTik : {e}")
+
+
+# Identifiant d'une connexion sur le MikroTik, ex : « *1A ».
+_SESSION_ID_RE = re.compile(r"^\*[0-9A-Fa-f]{1,8}$")
+
+
+def _tickets_for_codes(db: Session, db_router: models.Router, codes: list[str]) -> dict:
+    """Pour chaque code connu de ce routeur : forfait, durée totale, quota et vente."""
+    if not codes:
+        return {}
+    from app.routers.hotspot_public import _batch_label
+
+    rows = (
+        db.query(models.Voucher, models.VoucherBatch)
+        .join(models.VoucherBatch, models.Voucher.batch_id == models.VoucherBatch.id)
+        .filter(models.VoucherBatch.router_id == db_router.id, models.Voucher.code.in_(codes))
+        .all()
+    )
+    voucher_ids = [v.id for v, _ in rows]
+    sales = {s.voucher_id: s for s in db.query(models.Sale).filter(models.Sale.voucher_id.in_(voucher_ids)).all()} if voucher_ids else {}
+    purchases = {
+        p.voucher_id: p
+        for p in db.query(models.HotspotPurchase).filter(models.HotspotPurchase.voucher_id.in_(voucher_ids)).all()
+    } if voucher_ids else {}
+    tickets = {}
+    for voucher, batch in rows:
+        tickets[voucher.code] = {
+            "forfait": _batch_label(batch),
+            "limite": parse_ros_duration(batch.limit_uptime),
+            "quota_mo": batch.quota_mo,
+            "vente": sale_info(sales.get(voucher.id), purchases.get(voucher.id)),
+        }
+    return tickets
+
+
+@router.get("/{router_id}/live")
+async def get_live_view(
+    router_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Clients connectés en ce moment, avec leur forfait, le temps restant et les données
+    échangées, plus le nombre d'appareils présents sur le Wi-Fi sans ticket."""
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            sessions = await client.get_active_sessions()
+            try:
+                hosts = await client.get("ip/hotspot/host")
+            except Exception:
+                hosts = []
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de joindre le routeur : {e}")
+    sessions = sessions if isinstance(sessions, list) else []
+    hosts = hosts if isinstance(hosts, list) else []
+    codes = [s.get("user") for s in sessions if s.get("user")]
+    return build_live_view(sessions, hosts, _tickets_for_codes(db, db_router, codes))
+
+
+@router.delete("/{router_id}/live/{session_id}")
+async def disconnect_client(
+    router_id: int,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Déconnecte un client. Son ticket n'est pas supprimé : il peut se reconnecter avec son
+    code tant que son forfait n'est pas épuisé."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(status_code=400, detail="Connexion inconnue.")
+    db_router = _get_authorized_router(router_id, db, current_user)
+    try:
+        async with _client_for(db_router) as client:
+            await client.remove_active_session(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Impossible de déconnecter ce client : {e}")
+    return {"message": "Client déconnecté."}
 
 
 def _generate_unique_codes(db: Session, quantite: int, db_router: models.Router | None = None) -> list[str]:
