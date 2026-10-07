@@ -1,0 +1,35 @@
+name: Créer un compte administrateur
+
+# Lancé à la main depuis l'onglet Actions (bouton « Run workflow »).
+# L'identifiant et le mot de passe viennent des secrets ADMIN_LOGIN et ADMIN_PASSWORD du dépôt :
+# ils ne sont jamais écrits dans le code et sont masqués dans les journaux.
+on:
+  workflow_dispatch:
+    inputs:
+      environnement:
+        description: "Où créer le compte"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  create-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Créer ou mettre à jour le compte administrateur
+        uses: appleboy/ssh-action@v1
+        env:
+          ADMIN_LOGIN: ${{ secrets.ADMIN_LOGIN }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ADMIN_LOGIN,ADMIN_PASSWORD
+          command_timeout: 5m
+          script: |
+            cd ${{ secrets.VPS_PROJECT_PATH }}/${{ inputs.environnement }}
+            docker compose exec -T -e ADMIN_LOGIN="$ADMIN_LOGIN" -e ADMIN_PASSWORD="$ADMIN_PASSWORD" app python -m app.create_admin
