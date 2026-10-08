@@ -34,7 +34,20 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="MIABEWIFI", lifespan=lifespan)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Limite atteinte : message lisible dans « detail » (affiché tel quel par l'application
+    et par la page HotSpot), avec l'en-tête Retry-After ajouté par slowapi."""
+    from fastapi.responses import JSONResponse
+    response = JSONResponse(
+        {"detail": "Trop de demandes en peu de temps. Patientez une minute puis réessayez."},
+        status_code=429,
+    )
+    return request.app.state.limiter._inject_headers(response, request.state.view_rate_limit)
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 app.include_router(notifications.router)
 app.include_router(packs_info.router)
 

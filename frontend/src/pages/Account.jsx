@@ -4,6 +4,7 @@ import { LogOut, Send, User, HelpCircle } from 'lucide-react';
 import api from '../api/client';
 import './Account.css';
 import { getErrorMessage } from '../utils/errorMessage';
+import SecuritySettings from '../components/SecuritySettings';
 
 export default function Account() {
     const { user, logout } = useOutletContext();
@@ -45,6 +46,10 @@ function ProfilTab({ user, logout }) {
             <div className="router-meta" style={{ marginBottom: 16 }}>
                 <span>Nom : <strong>{user?.nom}</strong></span>
                 <span>Email : <strong>{user?.email}</strong></span>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, marginBottom: 20 }}>
+                <SecuritySettings />
             </div>
 
             <button className="btn-danger" onClick={logout}>

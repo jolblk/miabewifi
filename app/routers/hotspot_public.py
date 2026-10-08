@@ -24,12 +24,13 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.config import PAYGATE_AUTH_TOKEN
 from app.database import get_db
+from app.payment_guard import PHONE_LIMIT_MESSAGE, longest_window, phone_request_allowed
 from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
 from app.wireguard import is_router_active
 
 logger = logging.getLogger("miabewifi.hotspot_public")
 
-from app.limiter import limiter
+from app.limiter import limiter, hotspot_key, payment_key
 router = APIRouter(prefix="/public/hotspot", tags=["HotSpot public"])
 
 # Statuts d'achat renvoyés tels quels au client ; "en_cours" (traitement interne) est
@@ -116,7 +117,7 @@ def get_background(request: Request, token: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/{token}/forfaits")
-@limiter.limit("60/minute")
+@limiter.limit("120/minute", key_func=hotspot_key)
 def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
     """Forfaits achetables : un par (forfait, prix, durée), uniquement s'il reste des tickets."""
     db_router = _get_router_by_token(token, db)
@@ -162,7 +163,7 @@ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{token}/pay")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute", key_func=hotspot_key)
 async def start_payment(
     request: Request,
     token: str,
@@ -195,6 +196,21 @@ async def start_payment(
         raise HTTPException(status_code=409, detail="Ce forfait est épuisé pour le moment.")
 
     telephone = _normalize_phone(data.telephone)
+
+    # Pas plus de quelques demandes vers un même numéro (voir app/payment_guard.py).
+    now = datetime.utcnow()
+    recent_requests = [
+        created_at
+        for (created_at,) in db.query(models.HotspotPurchase.created_at).filter(
+            models.HotspotPurchase.telephone == telephone,
+            models.HotspotPurchase.statut != "echoue",
+            models.HotspotPurchase.created_at >= now - longest_window(),
+        )
+    ]
+    if not phone_request_allowed(recent_requests, now):
+        logger.warning("Demandes de paiement répétées vers %s refusées (routeur %s)", telephone, db_router.id)
+        raise HTTPException(status_code=429, detail=PHONE_LIMIT_MESSAGE)
+
     # Identifiant imprévisible : il donne accès au statut (et au code) de l'achat.
     identifier = f"miabewifi-hs-{db_router.id}-{int(time.time() * 1000)}-{secrets.token_hex(6)}"
 
@@ -241,7 +257,10 @@ async def start_payment(
 
 
 @router.get("/{token}/pay/{identifier}")
-@limiter.limit("60/minute")
+# 30/min par paiement (la page en fait 15) ; 600/min pour tout le hotspot = ~40 clients en attente
+# en même temps, tout en empêchant d'essayer des identifiants au hasard.
+@limiter.limit("30/minute", key_func=payment_key)
+@limiter.limit("600/minute", key_func=hotspot_key)
 def payment_status(request: Request, token: str, identifier: str, db: Session = Depends(get_db)):
     db_router = _get_router_by_token(token, db)
 
@@ -263,7 +282,7 @@ def payment_status(request: Request, token: str, identifier: str, db: Session = 
 
 
 @router.post("/{token}/retrieve")
-@limiter.limit("10/minute")
+@limiter.limit("30/minute", key_func=hotspot_key)
 def retrieve_code(
     request: Request,
     token: str,

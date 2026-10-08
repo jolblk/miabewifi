@@ -32,3 +32,22 @@ def test_sans_en_tete_on_prend_l_adresse_de_connexion():
 
 def test_en_tete_vide():
     assert client_ip(_request("172.18.0.2", " ")) == "172.18.0.2"
+
+# ---- compteurs de la page HotSpot publique ------------------------------------------------
+from app.limiter import hotspot_key, payment_key
+
+
+def _hotspot_request(peer, **path_params):
+    return SimpleNamespace(client=SimpleNamespace(host=peer), headers={}, path_params=path_params)
+
+
+def test_deux_hotspots_derriere_la_meme_ip_ont_des_compteurs_separes():
+    a = hotspot_key(_hotspot_request("41.207.10.5", token="routeurA"))
+    b = hotspot_key(_hotspot_request("41.207.10.5", token="routeurB"))
+    assert a != b
+
+
+def test_chaque_paiement_a_son_propre_compteur_meme_sur_le_meme_wifi():
+    a = payment_key(_hotspot_request("41.207.10.5", token="r", identifier="miabewifi-hs-1-1"))
+    b = payment_key(_hotspot_request("41.207.10.5", token="r", identifier="miabewifi-hs-1-2"))
+    assert a != b

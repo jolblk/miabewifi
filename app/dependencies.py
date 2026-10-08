@@ -20,6 +20,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur introuvable.")
 
+    # Mot de passe changé ou « déconnexion de tous les appareils » depuis cette connexion.
+    if not security.token_is_current(payload, user.token_version):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expirée, reconnectez-vous.")
+
     return user
 
 def get_current_admin(current_user: models.User = Depends(get_current_user)):

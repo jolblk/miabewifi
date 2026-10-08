@@ -10,7 +10,15 @@ export default function Login() {
     const [email, setEmail] = useState(location.state?.email || '');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [remember, setRemember] = useState(true);
+    // Décoché par défaut (ordinateurs partagés, cybercafés) ; l'appareil se souvient ensuite du
+    // dernier choix de la personne.
+    const [remember, setRemember] = useState(() => {
+        try {
+            return localStorage.getItem('miabewifi_remember') === '1';
+        } catch {
+            return false;
+        }
+    });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -23,11 +31,19 @@ export default function Login() {
             const body = new URLSearchParams();
             body.set('username', email);
             body.set('password', password);
+            body.set('remember', remember ? 'true' : 'false');
             const res = await api.post('/auth/login', body, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             });
             const storage = remember ? localStorage : sessionStorage;
+            localStorage.removeItem('miabewifi_token');
+            sessionStorage.removeItem('miabewifi_token');
             storage.setItem('miabewifi_token', res.data.access_token);
+            try {
+                localStorage.setItem('miabewifi_remember', remember ? '1' : '0');
+            } catch {
+                // navigation privée : le choix ne sera simplement pas retenu
+            }
             navigate('/', { replace: true });
         } catch (err) {
             setError(getErrorMessage(err, 'Connexion impossible.'));
@@ -79,7 +95,7 @@ export default function Login() {
 
                 <label className="login-remember">
                     <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                    Rester connecté sur cet appareil
+                    Rester connecté sur cet appareil (7 jours)
                 </label>
 
                 <button type="submit" className="login-submit" disabled={loading}>

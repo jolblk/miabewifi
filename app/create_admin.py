@@ -33,6 +33,8 @@ def create_or_update_admin(db, login: str, password: str) -> str:
     else:
         user.hashed_password = hash_password(password)
         user.role = "admin"
+        # Nouveau mot de passe : les connexions ouvertes avec l'ancien sont coupées.
+        user.token_version = (getattr(user, "token_version", 0) or 0) + 1
         action = "mis à jour"
     db.commit()
     return action

@@ -15,6 +15,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     role = Column(String, default="client")  # "client" ou "admin"
     trial_used = Column(Boolean, nullable=False, default=False, server_default=false())  # essai gratuit déjà accordé
+    # Augmente à chaque changement de mot de passe ou « déconnexion de tous les appareils » :
+    # les connexions ouvertes avant (jetons portant l'ancien numéro) ne sont plus acceptées.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
     routers = relationship("Router", back_populates="owner")
 
@@ -137,7 +140,7 @@ class HotspotPurchase(Base):
     id = Column(Integer, primary_key=True, index=True)
     router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("voucher_batches.id"), nullable=False)
-    telephone = Column(String, nullable=False)
+    telephone = Column(String, nullable=False, index=True)
     montant = Column(Integer, nullable=False)
     methode = Column(String, nullable=False)  # FLOOZ, TMONEY
     statut = Column(String, default="en_attente")  # en_attente, confirme, en_rupture, echoue

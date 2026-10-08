@@ -1,0 +1,941 @@
+From b8596db4e7f64b0c1d95fa36090c84c5481aab35 Mon Sep 17 00:00:00 2001
+From: MIABEWIFI <info@paygateglobal.com>
+Date: Thu, 8 Oct 2026 12:00:17 +0000
+Subject: [PATCH] =?UTF-8?q?S=C3=A9curit=C3=A9=20:=20limites=20de=20la=20pa?=
+ =?UTF-8?q?ge=20HotSpot,=20anti-spam=20de=20paiement,=20sessions=20r=C3=A9?=
+ =?UTF-8?q?vocables?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Page HotSpot publique : limites comptées par routeur (et par paiement pour le
+  suivi) au lieu de l'IP seule, pour que les clients d'un même Wi-Fi ne se
+  bloquent plus entre eux. Message 429 lisible en français.
+- Demandes de paiement : au plus 3 par 10 min et 6 par heure vers un même
+  numéro, tous routeurs confondus (app/payment_guard.py).
+- Sessions : numéro de version dans le jeton (users.token_version). Changer
+  son mot de passe, le réinitialiser ou « se déconnecter de tous les
+  appareils » coupe les connexions ouvertes. Connexion de 12 h si « Rester
+  connecté » n'est pas coché (7 jours sinon). Un lien de réinitialisation ne
+  sert plus de connexion.
+- Profil : changer son mot de passe, se déconnecter de tous les appareils.
+- Migration a7c3e9f1b2d4 + tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_015vCTR4SB3GFAMMFuDqiWSB
+---
+ ...c3e9f1b2d4_sessions_et_limite_paiements.py |  29 ++++
+ app/create_admin.py                           |   2 +
+ app/dependencies.py                           |   4 +
+ app/limiter.py                                |  18 +++
+ app/main.py                                   |  15 +-
+ app/models.py                                 |   5 +-
+ app/payment_guard.py                          |  36 +++++
+ app/routers/auth.py                           |  57 ++++++-
+ app/routers/hotspot_public.py                 |  29 +++-
+ app/schemas.py                                |   9 +-
+ app/security.py                               |  32 +++-
+ frontend/src/api/client.js                    |  12 ++
+ frontend/src/components/SecuritySettings.css  |  39 +++++
+ frontend/src/components/SecuritySettings.jsx  | 142 ++++++++++++++++++
+ frontend/src/pages/Account.jsx                |   5 +
+ frontend/src/pages/Login.jsx                  |  20 ++-
+ frontend/src/pages/Profile.jsx                |   7 +-
+ tests/test_limiter.py                         |  21 ++-
+ tests/test_payment_guard.py                   |  38 +++++
+ tests/test_sessions.py                        |  48 ++++++
+ 20 files changed, 544 insertions(+), 24 deletions(-)
+ create mode 100644 alembic/versions/a7c3e9f1b2d4_sessions_et_limite_paiements.py
+ create mode 100644 app/payment_guard.py
+ create mode 100644 frontend/src/components/SecuritySettings.css
+ create mode 100644 frontend/src/components/SecuritySettings.jsx
+ create mode 100644 tests/test_payment_guard.py
+ create mode 100644 tests/test_sessions.py
+
+diff --git a/alembic/versions/a7c3e9f1b2d4_sessions_et_limite_paiements.py b/alembic/versions/a7c3e9f1b2d4_sessions_et_limite_paiements.py
+new file mode 100644
+index 0000000..eefba53
+--- /dev/null
++++ b/alembic/versions/a7c3e9f1b2d4_sessions_et_limite_paiements.py
+@@ -0,0 +1,29 @@
++"""Sessions révocables (users.token_version) et index sur le numéro des achats HotSpot
++
++Revision ID: a7c3e9f1b2d4
++Revises: d4f6a1c8e2b9
++Create Date: 2026-10-08 12:00:00
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++revision: str = 'a7c3e9f1b2d4'
++down_revision: Union[str, Sequence[str], None] = 'd4f6a1c8e2b9'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    # 0 pour tous les comptes existants : les connexions en cours restent valables.
++    op.add_column('users', sa.Column('token_version', sa.Integer(), nullable=False, server_default='0'))
++    # Recherche rapide des demandes récentes vers un même numéro (limite anti-harcèlement).
++    op.create_index('ix_hotspot_purchases_telephone', 'hotspot_purchases', ['telephone'])
++
++
++def downgrade() -> None:
++    op.drop_index('ix_hotspot_purchases_telephone', table_name='hotspot_purchases')
++    op.drop_column('users', 'token_version')
+diff --git a/app/create_admin.py b/app/create_admin.py
+index d167809..9d3bfe7 100644
+--- a/app/create_admin.py
++++ b/app/create_admin.py
+@@ -33,6 +33,8 @@ def create_or_update_admin(db, login: str, password: str) -> str:
+     else:
+         user.hashed_password = hash_password(password)
+         user.role = "admin"
++        # Nouveau mot de passe : les connexions ouvertes avec l'ancien sont coupées.
++        user.token_version = (getattr(user, "token_version", 0) or 0) + 1
+         action = "mis à jour"
+     db.commit()
+     return action
+diff --git a/app/dependencies.py b/app/dependencies.py
+index ca3c50c..4a07b00 100644
+--- a/app/dependencies.py
++++ b/app/dependencies.py
+@@ -20,6 +20,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
+     if user is None:
+         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur introuvable.")
+ 
++    # Mot de passe changé ou « déconnexion de tous les appareils » depuis cette connexion.
++    if not security.token_is_current(payload, user.token_version):
++        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expirée, reconnectez-vous.")
++
+     return user
+ 
+ def get_current_admin(current_user: models.User = Depends(get_current_user)):
+diff --git a/app/limiter.py b/app/limiter.py
+index 52f98b5..1b06467 100644
+--- a/app/limiter.py
++++ b/app/limiter.py
+@@ -40,4 +40,22 @@ def client_ip(request: Request) -> str:
+     return peer
+ 
+ 
++def hotspot_key(request: Request) -> str:
++    """Compteur pour les routes publiques de la page HotSpot : un par routeur ET par IP.
++
++    Tous les clients d'un même Wi-Fi sortent sur Internet avec la même adresse IP (celle du
++    routeur). Compter par IP seule ferait partager une seule limite à tout un hotspot : dès
++    quelques clients en même temps, les paiements seraient refusés. Le jeton du routeur dans
++    l'adresse sépare chaque hotspot, et les limites de ces routes sont prévues pour un hotspot
++    entier (plusieurs dizaines de clients)."""
++    token = request.path_params.get("token", "")
++    return f"hotspot:{token}:{client_ip(request)}"
++
++
++def payment_key(request: Request) -> str:
++    """Compteur pour le suivi d'UN paiement (la page interroge le serveur toutes les 4 s).
++    Chaque client a son propre compteur, même si tout le hotspot partage la même IP."""
++    return f"paiement:{request.path_params.get('identifier', '')}"
++
++
+ limiter = Limiter(key_func=client_ip)
+\ No newline at end of file
+diff --git a/app/main.py b/app/main.py
+index 17390d5..480f460 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -34,7 +34,20 @@ async def lifespan(_app: FastAPI):
+ 
+ app = FastAPI(title="MIABEWIFI", lifespan=lifespan)
+ app.state.limiter = limiter
+-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
++
++
++def rate_limit_handler(request: Request, exc: RateLimitExceeded):
++    """Limite atteinte : message lisible dans « detail » (affiché tel quel par l'application
++    et par la page HotSpot), avec l'en-tête Retry-After ajouté par slowapi."""
++    from fastapi.responses import JSONResponse
++    response = JSONResponse(
++        {"detail": "Trop de demandes en peu de temps. Patientez une minute puis réessayez."},
++        status_code=429,
++    )
++    return request.app.state.limiter._inject_headers(response, request.state.view_rate_limit)
++
++
++app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+ app.include_router(notifications.router)
+ app.include_router(packs_info.router)
+ 
+diff --git a/app/models.py b/app/models.py
+index e369afd..23132fd 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -15,6 +15,9 @@ class User(Base):
+     created_at = Column(DateTime, default=datetime.utcnow)
+     role = Column(String, default="client")  # "client" ou "admin"
+     trial_used = Column(Boolean, nullable=False, default=False, server_default=false())  # essai gratuit déjà accordé
++    # Augmente à chaque changement de mot de passe ou « déconnexion de tous les appareils » :
++    # les connexions ouvertes avant (jetons portant l'ancien numéro) ne sont plus acceptées.
++    token_version = Column(Integer, nullable=False, default=0, server_default="0")
+ 
+     routers = relationship("Router", back_populates="owner")
+ 
+@@ -137,7 +140,7 @@ class HotspotPurchase(Base):
+     id = Column(Integer, primary_key=True, index=True)
+     router_id = Column(Integer, ForeignKey("routers.id"), nullable=False)
+     batch_id = Column(Integer, ForeignKey("voucher_batches.id"), nullable=False)
+-    telephone = Column(String, nullable=False)
++    telephone = Column(String, nullable=False, index=True)
+     montant = Column(Integer, nullable=False)
+     methode = Column(String, nullable=False)  # FLOOZ, TMONEY
+     statut = Column(String, default="en_attente")  # en_attente, confirme, en_rupture, echoue
+diff --git a/app/payment_guard.py b/app/payment_guard.py
+new file mode 100644
+index 0000000..4753a32
+--- /dev/null
++++ b/app/payment_guard.py
+@@ -0,0 +1,36 @@
++"""Protection contre l'envoi répété de demandes de paiement vers un même numéro.
++
++La page de paiement HotSpot est publique : sans cette règle, n'importe qui pourrait déclencher
++en boucle des demandes Flooz / T-Money sur le téléphone d'une autre personne (harcèlement,
++plaintes auprès de PayGate). On compte les demandes récentes vers ce numéro, TOUS routeurs
++confondus, et on refuse au-delà des seuils ci-dessous.
++
++Les tentatives dont PayGate a refusé le lancement (statut « echoue ») ne comptent pas : aucune
++demande n'est arrivée sur le téléphone.
++"""
++from datetime import datetime, timedelta
++
++# (fenêtre, nombre maximum de demandes dans cette fenêtre)
++PHONE_LIMITS = (
++    (timedelta(minutes=10), 3),
++    (timedelta(hours=1), 6),
++)
++
++PHONE_LIMIT_MESSAGE = (
++    "Plusieurs demandes de paiement ont déjà été envoyées à ce numéro. Validez celle reçue sur "
++    "votre téléphone, ou réessayez dans quelques minutes."
++)
++
++
++def phone_request_allowed(request_times: list[datetime], now: datetime) -> bool:
++    """Vrai si une nouvelle demande vers ce numéro est autorisée, d'après les dates des
++    demandes déjà envoyées (au moins celles de la dernière heure)."""
++    for window, maximum in PHONE_LIMITS:
++        recent = sum(1 for t in request_times if t is not None and t >= now - window)
++        if recent >= maximum:
++            return False
++    return True
++
++
++def longest_window() -> timedelta:
++    return max(window for window, _ in PHONE_LIMITS)
+diff --git a/app/routers/auth.py b/app/routers/auth.py
+index bc50f5e..52f5ff9 100644
+--- a/app/routers/auth.py
++++ b/app/routers/auth.py
+@@ -1,4 +1,4 @@
+-from fastapi import APIRouter, Depends, HTTPException, status, Request
++from fastapi import APIRouter, Depends, Form, HTTPException, status, Request
+ from fastapi.security import OAuth2PasswordRequestForm
+ from sqlalchemy.orm import Session
+ from slowapi import Limiter
+@@ -33,7 +33,12 @@ def register(request: Request, user: schemas.UserCreate, db: Session = Depends(g
+ 
+ @router.post("/login", response_model=schemas.Token)
+ @limiter.limit("10/minute")
+-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
++def login(
++    request: Request,
++    form_data: OAuth2PasswordRequestForm = Depends(),
++    remember: bool = Form(True),
++    db: Session = Depends(get_db),
++):
+     user = db.query(models.User).filter(models.User.email == form_data.username).first()
+ 
+     if not user or not security.verify_password(form_data.password, user.hashed_password):
+@@ -42,7 +47,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
+             detail="Email ou mot de passe incorrect.",
+         )
+ 
+-    token = security.create_access_token(data={"sub": str(user.id)})
++    token = security.create_access_token(user.id, user.token_version, remember=remember)
+     return {"access_token": token, "token_type": "bearer"}
+ 
+ from app.dependencies import get_current_user, oauth2_scheme as oauth2_scheme_for_logout
+@@ -69,7 +74,7 @@ def forgot_password(request: Request, payload: schemas.ForgotPasswordRequest, db
+     user = db.query(models.User).filter(models.User.email == payload.email).first()
+ 
+     if user:
+-        token = security.create_reset_token(user.id)
++        token = security.create_reset_token(user.id, user.token_version)
+         reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
+         try:
+             send_reset_email(user.email, reset_link)
+@@ -94,8 +99,50 @@ def reset_password(request: Request, payload: schemas.ResetPasswordRequest, db:
+     user = db.query(models.User).filter(models.User.id == int(data["sub"])).first()
+     if not user:
+         raise HTTPException(status_code=400, detail="Utilisateur introuvable.")
++    # Lien demandé avant un autre changement de mot de passe : il n'est plus valable.
++    if not security.token_is_current(data, user.token_version):
++        raise HTTPException(status_code=400, detail="Lien invalide ou expiré.")
+ 
+     user.hashed_password = security.hash_password(payload.new_password)
++    # Toutes les connexions ouvertes (peut-être par quelqu'un qui connaissait l'ancien mot de
++    # passe) sont coupées.
++    user.token_version = (user.token_version or 0) + 1
+     db.add(models.RevokedToken(token_hash=token_hash))
+     db.commit()
+-    return {"message": "Mot de passe réinitialisé avec succès."}
+\ No newline at end of file
++    return {"message": "Mot de passe réinitialisé avec succès. Reconnectez-vous sur vos appareils."}
++
++
++@router.post("/change-password", response_model=schemas.Token)
++@limiter.limit("5/minute;20/hour")
++def change_password(
++    request: Request,
++    payload: schemas.ChangePasswordRequest,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Change le mot de passe depuis l'application. Les AUTRES appareils sont déconnectés ;
++    celui-ci reçoit une nouvelle connexion pour rester connecté."""
++    if not security.verify_password(payload.current_password, current_user.hashed_password):
++        raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect.")
++    if security.verify_password(payload.new_password, current_user.hashed_password):
++        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit être différent de l'actuel.")
++
++    current_user.hashed_password = security.hash_password(payload.new_password)
++    current_user.token_version = (current_user.token_version or 0) + 1
++    db.commit()
++    token = security.create_access_token(current_user.id, current_user.token_version, remember=payload.remember)
++    return {"access_token": token, "token_type": "bearer"}
++
++
++@router.post("/logout-all")
++@limiter.limit("5/minute")
++def logout_all(
++    request: Request,
++    db: Session = Depends(get_db),
++    current_user: models.User = Depends(get_current_user),
++):
++    """Déconnecte le compte de TOUS les appareils, y compris celui-ci (téléphone perdu,
++    ordinateur partagé oublié connecté...)."""
++    current_user.token_version = (current_user.token_version or 0) + 1
++    db.commit()
++    return {"message": "Vous avez été déconnecté de tous les appareils."}
+\ No newline at end of file
+diff --git a/app/routers/hotspot_public.py b/app/routers/hotspot_public.py
+index dce9880..8e06a75 100644
+--- a/app/routers/hotspot_public.py
++++ b/app/routers/hotspot_public.py
+@@ -24,12 +24,13 @@ from sqlalchemy.orm import Session
+ from app import models, schemas
+ from app.config import PAYGATE_AUTH_TOKEN
+ from app.database import get_db
++from app.payment_guard import PHONE_LIMIT_MESSAGE, longest_window, phone_request_allowed
+ from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
+ from app.wireguard import is_router_active
+ 
+ logger = logging.getLogger("miabewifi.hotspot_public")
+ 
+-from app.limiter import limiter
++from app.limiter import limiter, hotspot_key, payment_key
+ router = APIRouter(prefix="/public/hotspot", tags=["HotSpot public"])
+ 
+ # Statuts d'achat renvoyés tels quels au client ; "en_cours" (traitement interne) est
+@@ -116,7 +117,7 @@ def get_background(request: Request, token: str, db: Session = Depends(get_db)):
+     )
+ 
+ @router.get("/{token}/forfaits")
+-@limiter.limit("60/minute")
++@limiter.limit("120/minute", key_func=hotspot_key)
+ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
+     """Forfaits achetables : un par (forfait, prix, durée), uniquement s'il reste des tickets."""
+     db_router = _get_router_by_token(token, db)
+@@ -162,7 +163,7 @@ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
+ 
+ 
+ @router.post("/{token}/pay")
+-@limiter.limit("10/minute")
++@limiter.limit("20/minute", key_func=hotspot_key)
+ async def start_payment(
+     request: Request,
+     token: str,
+@@ -195,6 +196,21 @@ async def start_payment(
+         raise HTTPException(status_code=409, detail="Ce forfait est épuisé pour le moment.")
+ 
+     telephone = _normalize_phone(data.telephone)
++
++    # Pas plus de quelques demandes vers un même numéro (voir app/payment_guard.py).
++    now = datetime.utcnow()
++    recent_requests = [
++        created_at
++        for (created_at,) in db.query(models.HotspotPurchase.created_at).filter(
++            models.HotspotPurchase.telephone == telephone,
++            models.HotspotPurchase.statut != "echoue",
++            models.HotspotPurchase.created_at >= now - longest_window(),
++        )
++    ]
++    if not phone_request_allowed(recent_requests, now):
++        logger.warning("Demandes de paiement répétées vers %s refusées (routeur %s)", telephone, db_router.id)
++        raise HTTPException(status_code=429, detail=PHONE_LIMIT_MESSAGE)
++
+     # Identifiant imprévisible : il donne accès au statut (et au code) de l'achat.
+     identifier = f"miabewifi-hs-{db_router.id}-{int(time.time() * 1000)}-{secrets.token_hex(6)}"
+ 
+@@ -241,7 +257,10 @@ async def start_payment(
+ 
+ 
+ @router.get("/{token}/pay/{identifier}")
+-@limiter.limit("60/minute")
++# 30/min par paiement (la page en fait 15) ; 600/min pour tout le hotspot = ~40 clients en attente
++# en même temps, tout en empêchant d'essayer des identifiants au hasard.
++@limiter.limit("30/minute", key_func=payment_key)
++@limiter.limit("600/minute", key_func=hotspot_key)
+ def payment_status(request: Request, token: str, identifier: str, db: Session = Depends(get_db)):
+     db_router = _get_router_by_token(token, db)
+ 
+@@ -263,7 +282,7 @@ def payment_status(request: Request, token: str, identifier: str, db: Session =
+ 
+ 
+ @router.post("/{token}/retrieve")
+-@limiter.limit("10/minute")
++@limiter.limit("30/minute", key_func=hotspot_key)
+ def retrieve_code(
+     request: Request,
+     token: str,
+diff --git a/app/schemas.py b/app/schemas.py
+index c15dd30..9f15d0f 100644
+--- a/app/schemas.py
++++ b/app/schemas.py
+@@ -37,7 +37,14 @@ class ForgotPasswordRequest(BaseModel):
+ 
+ class ResetPasswordRequest(BaseModel):
+     token: str
+-    new_password: str = Field(min_length=8)
++    new_password: str = Field(min_length=8, max_length=128)
++
++
++class ChangePasswordRequest(BaseModel):
++    current_password: str = Field(min_length=1, max_length=128)
++    new_password: str = Field(min_length=8, max_length=128)
++    # Durée de la nouvelle connexion de CET appareil (même choix qu'à la connexion).
++    remember: bool = True
+ 
+ 
+ class RouterCreate(BaseModel):
+diff --git a/app/security.py b/app/security.py
+index f11ed60..0a748bf 100644
+--- a/app/security.py
++++ b/app/security.py
+@@ -5,7 +5,11 @@ from passlib.context import CryptContext
+ from app.config import SECRET_KEY
+ 
+ ALGORITHM = "HS256"
++# « Rester connecté sur cet appareil » coché : 7 jours. Sinon : 12 heures (ordinateur partagé,
++# cybercafé...). Dans les deux cas, changer son mot de passe ou « se déconnecter de tous les
++# appareils » coupe immédiatement toutes les connexions (voir token_version).
+ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 jours
++SHORT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12  # 12 heures
+ RESET_TOKEN_EXPIRE_MINUTES = 30
+ 
+ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+@@ -19,23 +23,37 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
+     return pwd_context.verify(plain_password, hashed_password)
+ 
+ 
+-def create_access_token(data: dict) -> str:
+-    to_encode = data.copy()
+-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+-    to_encode.update({"exp": expire})
++def create_access_token(user_id: int, token_version: int = 0, remember: bool = True) -> str:
++    minutes = ACCESS_TOKEN_EXPIRE_MINUTES if remember else SHORT_ACCESS_TOKEN_EXPIRE_MINUTES
++    to_encode = {
++        "sub": str(user_id),
++        "ver": token_version or 0,
++        "exp": datetime.utcnow() + timedelta(minutes=minutes),
++    }
+     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+ 
+ 
+ def decode_access_token(token: str) -> dict | None:
+     try:
+-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
++        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+     except Exception:
+         return None
++    # Un lien de réinitialisation (signé avec la même clé) ne doit jamais servir de connexion.
++    if payload.get("purpose") is not None or not str(payload.get("sub", "")).isdigit():
++        return None
++    return payload
++
++
++def token_is_current(payload: dict, user_token_version: int | None) -> bool:
++    """Faux si le jeton date d'avant un changement de mot de passe ou une déconnexion de tous
++    les appareils. Les jetons émis avant cette fonctionnalité n'ont pas de « ver » : ils
++    valent 0, comme tous les comptes au départ."""
++    return payload.get("ver", 0) == (user_token_version or 0)
+ 
+ 
+-def create_reset_token(user_id: int) -> str:
++def create_reset_token(user_id: int, token_version: int = 0) -> str:
+     expire = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+-    to_encode = {"sub": str(user_id), "purpose": "password_reset", "exp": expire}
++    to_encode = {"sub": str(user_id), "purpose": "password_reset", "ver": token_version or 0, "exp": expire}
+     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+ 
+ 
+diff --git a/frontend/src/api/client.js b/frontend/src/api/client.js
+index 865d062..8fe0c01 100644
+--- a/frontend/src/api/client.js
++++ b/frontend/src/api/client.js
+@@ -4,6 +4,18 @@ function getToken() {
+     return localStorage.getItem('miabewifi_token') || sessionStorage.getItem('miabewifi_token');
+ }
+ 
++// Remplace le jeton de connexion en le gardant au même endroit (localStorage = « rester
++// connecté », sessionStorage = jusqu'à la fermeture du navigateur).
++export function replaceToken(token) {
++    const storage = localStorage.getItem('miabewifi_token') ? localStorage : sessionStorage;
++    storage.setItem('miabewifi_token', token);
++}
++
++// Vrai si la connexion actuelle a été ouverte avec « Rester connecté sur cet appareil ».
++export function isRememberedSession() {
++    return Boolean(localStorage.getItem('miabewifi_token'));
++}
++
+ const api = axios.create({ baseURL: '' });
+ 
+ api.interceptors.request.use((config) => {
+diff --git a/frontend/src/components/SecuritySettings.css b/frontend/src/components/SecuritySettings.css
+new file mode 100644
+index 0000000..a20cded
+--- /dev/null
++++ b/frontend/src/components/SecuritySettings.css
+@@ -0,0 +1,39 @@
++.security-settings {
++    display: flex;
++    flex-direction: column;
++    gap: 24px;
++}
++
++.security-block {
++    max-width: 420px;
++}
++
++.security-block + .security-block {
++    border-top: 1px solid var(--border);
++    padding-top: 20px;
++}
++
++.security-title {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++    font-size: 16px;
++    margin: 0 0 4px;
++}
++
++.security-settings .text-input {
++    width: 100%;
++}
++
++.security-settings .success-text {
++    display: flex;
++    align-items: center;
++    gap: 6px;
++}
++
++.security-hint {
++    font-size: 14px;
++    color: var(--text-muted);
++    margin: 0 0 12px;
++    line-height: 1.5;
++}
+diff --git a/frontend/src/components/SecuritySettings.jsx b/frontend/src/components/SecuritySettings.jsx
+new file mode 100644
+index 0000000..e3c0d7b
+--- /dev/null
++++ b/frontend/src/components/SecuritySettings.jsx
+@@ -0,0 +1,142 @@
++import { useState } from 'react';
++import { KeyRound, LogOut, ShieldCheck } from 'lucide-react';
++import api, { isRememberedSession, replaceToken } from '../api/client';
++import { getErrorMessage } from '../utils/errorMessage';
++import { confirmDialog } from '../utils/confirm';
++import './SecuritySettings.css';
++
++// Bloc « Sécurité » du profil : changer son mot de passe, se déconnecter de tous les appareils.
++export default function SecuritySettings() {
++    return (
++        <div className="security-settings">
++            <ChangePasswordForm />
++            <LogoutEverywhere />
++        </div>
++    );
++}
++
++function ChangePasswordForm() {
++    const [current, setCurrent] = useState('');
++    const [next, setNext] = useState('');
++    const [confirm, setConfirm] = useState('');
++    const [busy, setBusy] = useState(false);
++    const [error, setError] = useState('');
++    const [success, setSuccess] = useState('');
++
++    async function handleSubmit(e) {
++        e.preventDefault();
++        setError('');
++        setSuccess('');
++        if (next.length < 8) return setError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
++        if (next !== confirm) return setError('Les deux nouveaux mots de passe ne sont pas identiques.');
++        if (next === current) return setError("Le nouveau mot de passe doit être différent de l'actuel.");
++        setBusy(true);
++        try {
++            const res = await api.post('/auth/change-password', {
++                current_password: current,
++                new_password: next,
++                remember: isRememberedSession(),
++            });
++            // Les autres appareils sont déconnectés ; celui-ci reçoit une nouvelle connexion.
++            replaceToken(res.data.access_token);
++            setCurrent('');
++            setNext('');
++            setConfirm('');
++            setSuccess('Mot de passe changé. Vos autres appareils ont été déconnectés.');
++        } catch (err) {
++            setError(getErrorMessage(err, "Le mot de passe n'a pas pu être changé."));
++        } finally {
++            setBusy(false);
++        }
++    }
++
++    return (
++        <form className="form-stack security-block" onSubmit={handleSubmit}>
++            <h2 className="security-title"><KeyRound size={18} /> Changer mon mot de passe</h2>
++
++            <div>
++                <label className="field-label" htmlFor="sec-current">Mot de passe actuel</label>
++                <input
++                    id="sec-current"
++                    type="password"
++                    className="text-input"
++                    autoComplete="current-password"
++                    required
++                    value={current}
++                    onChange={(e) => setCurrent(e.target.value)}
++                />
++            </div>
++            <div>
++                <label className="field-label" htmlFor="sec-new">Nouveau mot de passe (8 caractères minimum)</label>
++                <input
++                    id="sec-new"
++                    type="password"
++                    className="text-input"
++                    autoComplete="new-password"
++                    minLength={8}
++                    required
++                    value={next}
++                    onChange={(e) => setNext(e.target.value)}
++                />
++            </div>
++            <div>
++                <label className="field-label" htmlFor="sec-confirm">Confirmer le nouveau mot de passe</label>
++                <input
++                    id="sec-confirm"
++                    type="password"
++                    className="text-input"
++                    autoComplete="new-password"
++                    minLength={8}
++                    required
++                    value={confirm}
++                    onChange={(e) => setConfirm(e.target.value)}
++                />
++            </div>
++
++            {error && <p className="error-text" role="alert">{error}</p>}
++            {success && <p className="success-text" role="status"><ShieldCheck size={16} /> {success}</p>}
++
++            <button className="btn-primary" type="submit" disabled={busy}>
++                {busy ? 'Enregistrement…' : 'Changer le mot de passe'}
++            </button>
++        </form>
++    );
++}
++
++function LogoutEverywhere() {
++    const [busy, setBusy] = useState(false);
++    const [error, setError] = useState('');
++
++    async function handleClick() {
++        const ok = await confirmDialog(
++            'Vous serez déconnecté de tous vos appareils, y compris celui-ci. Il faudra vous reconnecter avec votre mot de passe.',
++            { confirmLabel: 'Tout déconnecter', danger: true },
++        );
++        if (!ok) return;
++        setBusy(true);
++        setError('');
++        try {
++            await api.post('/auth/logout-all');
++            localStorage.removeItem('miabewifi_token');
++            sessionStorage.removeItem('miabewifi_token');
++            window.location.href = '/login';
++        } catch (err) {
++            setError(getErrorMessage(err, "La déconnexion n'a pas pu être effectuée."));
++            setBusy(false);
++        }
++    }
++
++    return (
++        <div className="security-block">
++            <h2 className="security-title"><LogOut size={18} /> Appareils connectés</h2>
++            <p className="security-hint">
++                Téléphone perdu, ordinateur partagé resté connecté ? Coupez toutes les connexions ouvertes
++                avec votre compte.
++            </p>
++            {error && <p className="error-text" role="alert">{error}</p>}
++            <button className="btn-secondary" type="button" onClick={handleClick} disabled={busy}>
++                {busy ? 'Déconnexion…' : 'Se déconnecter de tous les appareils'}
++            </button>
++        </div>
++    );
++}
+diff --git a/frontend/src/pages/Account.jsx b/frontend/src/pages/Account.jsx
+index 870333b..df28e31 100644
+--- a/frontend/src/pages/Account.jsx
++++ b/frontend/src/pages/Account.jsx
+@@ -4,6 +4,7 @@ import { LogOut, Send, User, HelpCircle } from 'lucide-react';
+ import api from '../api/client';
+ import './Account.css';
+ import { getErrorMessage } from '../utils/errorMessage';
++import SecuritySettings from '../components/SecuritySettings';
+ 
+ export default function Account() {
+     const { user, logout } = useOutletContext();
+@@ -47,6 +48,10 @@ function ProfilTab({ user, logout }) {
+                 <span>Email : <strong>{user?.email}</strong></span>
+             </div>
+ 
++            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, marginBottom: 20 }}>
++                <SecuritySettings />
++            </div>
++
+             <button className="btn-danger" onClick={logout}>
+                 <LogOut size={16} /> Déconnexion
+             </button>
+diff --git a/frontend/src/pages/Login.jsx b/frontend/src/pages/Login.jsx
+index cc8239d..e38e8e5 100644
+--- a/frontend/src/pages/Login.jsx
++++ b/frontend/src/pages/Login.jsx
+@@ -10,7 +10,15 @@ export default function Login() {
+     const [email, setEmail] = useState(location.state?.email || '');
+     const [password, setPassword] = useState('');
+     const [showPassword, setShowPassword] = useState(false);
+-    const [remember, setRemember] = useState(true);
++    // Décoché par défaut (ordinateurs partagés, cybercafés) ; l'appareil se souvient ensuite du
++    // dernier choix de la personne.
++    const [remember, setRemember] = useState(() => {
++        try {
++            return localStorage.getItem('miabewifi_remember') === '1';
++        } catch {
++            return false;
++        }
++    });
+     const [error, setError] = useState('');
+     const [loading, setLoading] = useState(false);
+     const navigate = useNavigate();
+@@ -23,11 +31,19 @@ export default function Login() {
+             const body = new URLSearchParams();
+             body.set('username', email);
+             body.set('password', password);
++            body.set('remember', remember ? 'true' : 'false');
+             const res = await api.post('/auth/login', body, {
+                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+             });
+             const storage = remember ? localStorage : sessionStorage;
++            localStorage.removeItem('miabewifi_token');
++            sessionStorage.removeItem('miabewifi_token');
+             storage.setItem('miabewifi_token', res.data.access_token);
++            try {
++                localStorage.setItem('miabewifi_remember', remember ? '1' : '0');
++            } catch {
++                // navigation privée : le choix ne sera simplement pas retenu
++            }
+             navigate('/', { replace: true });
+         } catch (err) {
+             setError(getErrorMessage(err, 'Connexion impossible.'));
+@@ -79,7 +95,7 @@ export default function Login() {
+ 
+                 <label className="login-remember">
+                     <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+-                    Rester connecté sur cet appareil
++                    Rester connecté sur cet appareil (7 jours)
+                 </label>
+ 
+                 <button type="submit" className="login-submit" disabled={loading}>
+diff --git a/frontend/src/pages/Profile.jsx b/frontend/src/pages/Profile.jsx
+index 0e911b5..15ac21a 100644
+--- a/frontend/src/pages/Profile.jsx
++++ b/frontend/src/pages/Profile.jsx
+@@ -1,5 +1,6 @@
+ import { useOutletContext } from 'react-router-dom';
+ import { LogOut } from 'lucide-react';
++import SecuritySettings from '../components/SecuritySettings';
+ 
+ export default function Profile() {
+     const { user, logout } = useOutletContext();
+@@ -8,11 +9,15 @@ export default function Profile() {
+         <div>
+             <h1 className="page-title">Profil</h1>
+ 
+-            <div className="section-card router-meta">
++            <div className="section-card router-meta" style={{ marginBottom: 16 }}>
+                 <span>Nom : <strong>{user?.nom}</strong></span>
+                 <span>Email : <strong>{user?.email}</strong></span>
+             </div>
+ 
++            <div className="section-card" style={{ marginBottom: 16 }}>
++                <SecuritySettings />
++            </div>
++
+             <button className="btn-danger" onClick={logout}>
+                 <LogOut size={16} /> Déconnexion
+             </button>
+diff --git a/tests/test_limiter.py b/tests/test_limiter.py
+index f60f63e..ebd655f 100644
+--- a/tests/test_limiter.py
++++ b/tests/test_limiter.py
+@@ -31,4 +31,23 @@ def test_sans_en_tete_on_prend_l_adresse_de_connexion():
+ 
+ 
+ def test_en_tete_vide():
+-    assert client_ip(_request("172.18.0.2", " ")) == "172.18.0.2"
+\ No newline at end of file
++    assert client_ip(_request("172.18.0.2", " ")) == "172.18.0.2"
++
++# ---- compteurs de la page HotSpot publique ------------------------------------------------
++from app.limiter import hotspot_key, payment_key
++
++
++def _hotspot_request(peer, **path_params):
++    return SimpleNamespace(client=SimpleNamespace(host=peer), headers={}, path_params=path_params)
++
++
++def test_deux_hotspots_derriere_la_meme_ip_ont_des_compteurs_separes():
++    a = hotspot_key(_hotspot_request("41.207.10.5", token="routeurA"))
++    b = hotspot_key(_hotspot_request("41.207.10.5", token="routeurB"))
++    assert a != b
++
++
++def test_chaque_paiement_a_son_propre_compteur_meme_sur_le_meme_wifi():
++    a = payment_key(_hotspot_request("41.207.10.5", token="r", identifier="miabewifi-hs-1-1"))
++    b = payment_key(_hotspot_request("41.207.10.5", token="r", identifier="miabewifi-hs-1-2"))
++    assert a != b
+diff --git a/tests/test_payment_guard.py b/tests/test_payment_guard.py
+new file mode 100644
+index 0000000..3c30c70
+--- /dev/null
++++ b/tests/test_payment_guard.py
+@@ -0,0 +1,38 @@
++"""Tests de la limite de demandes de paiement par numéro (app/payment_guard.py).
++Lancer avec :  python -m pytest tests/test_payment_guard.py
++"""
++from datetime import datetime, timedelta
++
++from app.payment_guard import phone_request_allowed
++
++NOW = datetime(2026, 10, 8, 12, 0, 0)
++
++
++def _ago(**kwargs):
++    return NOW - timedelta(**kwargs)
++
++
++def test_premiere_demande_autorisee():
++    assert phone_request_allowed([], NOW)
++
++
++def test_deux_demandes_recentes_encore_autorisees():
++    assert phone_request_allowed([_ago(minutes=1), _ago(minutes=3)], NOW)
++
++
++def test_trois_demandes_en_dix_minutes_bloquent():
++    assert not phone_request_allowed([_ago(minutes=1), _ago(minutes=4), _ago(minutes=9)], NOW)
++
++
++def test_les_demandes_anciennes_ne_comptent_plus_pour_les_dix_minutes():
++    assert phone_request_allowed([_ago(minutes=11), _ago(minutes=20), _ago(minutes=1)], NOW)
++
++
++def test_six_demandes_dans_l_heure_bloquent():
++    times = [_ago(minutes=m) for m in (12, 20, 30, 40, 50, 55)]
++    assert not phone_request_allowed(times, NOW)
++
++
++def test_au_dela_d_une_heure_tout_est_oublie():
++    times = [_ago(minutes=m) for m in (61, 70, 80, 90, 100, 110, 120)]
++    assert phone_request_allowed(times, NOW)
+diff --git a/tests/test_sessions.py b/tests/test_sessions.py
+new file mode 100644
+index 0000000..862864d
+--- /dev/null
++++ b/tests/test_sessions.py
+@@ -0,0 +1,48 @@
++"""Tests des connexions révocables (app/security.py).
++Lancer avec :  python -m pytest tests/test_sessions.py
++"""
++from datetime import datetime
++
++from app import security
++
++
++def _exp_hours(token):
++    payload = security.decode_access_token(token)
++    return (datetime.utcfromtimestamp(payload["exp"]) - datetime.utcnow()).total_seconds() / 3600
++
++
++def test_le_jeton_porte_le_numero_de_version():
++    payload = security.decode_access_token(security.create_access_token(7, token_version=3))
++    assert payload["sub"] == "7" and payload["ver"] == 3
++
++
++def test_duree_selon_rester_connecte():
++    assert 24 * 7 - 1 < _exp_hours(security.create_access_token(1, remember=True)) <= 24 * 7
++    assert 11 < _exp_hours(security.create_access_token(1, remember=False)) <= 12
++
++
++def test_jeton_perime_apres_changement_de_mot_de_passe():
++    payload = security.decode_access_token(security.create_access_token(1, token_version=0))
++    assert security.token_is_current(payload, 0)
++    assert not security.token_is_current(payload, 1)
++
++
++def test_anciens_jetons_sans_version_restent_valables_au_depart():
++    assert security.token_is_current({"sub": "1"}, 0)
++    assert security.token_is_current({"sub": "1"}, None)
++    assert not security.token_is_current({"sub": "1"}, 1)
++
++
++def test_un_lien_de_reinitialisation_ne_sert_pas_de_connexion():
++    reset = security.create_reset_token(1)
++    assert security.decode_access_token(reset) is None
++    assert security.decode_reset_token(reset) is not None
++
++
++def test_une_connexion_ne_sert_pas_de_lien_de_reinitialisation():
++    assert security.decode_reset_token(security.create_access_token(1)) is None
++
++
++def test_jeton_falsifie_refuse():
++    token = security.create_access_token(1)
++    assert security.decode_access_token(token[:-2] + "xx") is None
+-- 
+2.43.0
+

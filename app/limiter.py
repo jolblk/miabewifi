@@ -40,4 +40,22 @@ def client_ip(request: Request) -> str:
     return peer
 
 
+def hotspot_key(request: Request) -> str:
+    """Compteur pour les routes publiques de la page HotSpot : un par routeur ET par IP.
+
+    Tous les clients d'un même Wi-Fi sortent sur Internet avec la même adresse IP (celle du
+    routeur). Compter par IP seule ferait partager une seule limite à tout un hotspot : dès
+    quelques clients en même temps, les paiements seraient refusés. Le jeton du routeur dans
+    l'adresse sépare chaque hotspot, et les limites de ces routes sont prévues pour un hotspot
+    entier (plusieurs dizaines de clients)."""
+    token = request.path_params.get("token", "")
+    return f"hotspot:{token}:{client_ip(request)}"
+
+
+def payment_key(request: Request) -> str:
+    """Compteur pour le suivi d'UN paiement (la page interroge le serveur toutes les 4 s).
+    Chaque client a son propre compteur, même si tout le hotspot partage la même IP."""
+    return f"paiement:{request.path_params.get('identifier', '')}"
+
+
 limiter = Limiter(key_func=client_ip)

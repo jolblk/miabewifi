@@ -1,0 +1,39 @@
+.security-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.security-block {
+    max-width: 420px;
+}
+
+.security-block + .security-block {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+}
+
+.security-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    margin: 0 0 4px;
+}
+
+.security-settings .text-input {
+    width: 100%;
+}
+
+.security-settings .success-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.security-hint {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
