@@ -8,8 +8,8 @@ from app import branding
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8)
-    nom: str
+    password: str = Field(min_length=8, max_length=128)
+    nom: str = Field(min_length=1, max_length=100)
 
 
 class UserOut(BaseModel):
@@ -86,23 +86,29 @@ class MikrotikCredentialsUpdate(BaseModel):
     api_username: str
     api_password: str
 
+# Numéro mobile money : chiffres uniquement, « + » facultatif devant (même règle que l'application).
+PHONE_PATTERN = r"^\+?\d{8,15}$"
+# Plafond de sécurité d'une opération (même valeur que les corrections de solde de l'admin).
+MAX_OPERATION_FCFA = 10_000_000
+
+
 class RechargeRequest(BaseModel):
-    phone_number: str
-    network: str  # FLOOZ ou TMONEY
-    montant: int = Field(gt=0)
+    phone_number: str = Field(pattern=PHONE_PATTERN)
+    network: Literal["FLOOZ", "TMONEY"]
+    montant: int = Field(gt=0, le=MAX_OPERATION_FCFA)
 
 
 class WithdrawRequest(BaseModel):
-    phone_number: str
-    network: str  # FLOOZ ou TMONEY
-    montant: int = Field(gt=0)
+    phone_number: str = Field(pattern=PHONE_PATTERN)
+    network: Literal["FLOOZ", "TMONEY"]
+    montant: int = Field(gt=0, le=MAX_OPERATION_FCFA)
     password: str = Field(min_length=1, max_length=200)  # mot de passe du compte, pour confirmer
 
 
 class SupportMessage(BaseModel):
-    telephone: Optional[str] = None
-    sujet: Optional[str] = None
-    message: str
+    telephone: Optional[str] = Field(default=None, max_length=30)
+    sujet: Optional[str] = Field(default=None, max_length=200)
+    message: str = Field(max_length=3000)
 
 
 class ActivatePackRequest(BaseModel):
@@ -119,7 +125,8 @@ class VoucherBatchCreate(BaseModel):
 
 
 class SaleCreate(BaseModel):
-    montant: Optional[int] = None
+    # Prix réellement encaissé (vide = prix du forfait). 0 autorisé : ticket offert.
+    montant: Optional[int] = Field(default=None, ge=0, le=MAX_OPERATION_FCFA)
 
 
 class SaleOut(BaseModel):

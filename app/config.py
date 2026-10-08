@@ -57,3 +57,9 @@ HOTSPOT_SALE_FEE_RATE = os.getenv("HOTSPOT_SALE_FEE_RATE", "0.01")
 # Fréquence (en secondes) du rattrapage des paiements de tickets dont le webhook PayGate
 # n'est pas arrivé (on redemande l'état à PayGate). 0 = désactivé.
 PURCHASE_RECONCILE_INTERVAL_SECONDS = int(os.getenv("PURCHASE_RECONCILE_INTERVAL_SECONDS", "30"))
+
+
+# Documentation interactive de l'API (/docs, /redoc, /openapi.json). Désactivée par défaut :
+# elle donne à n'importe qui la carte complète de l'API. Pour l'activer (en local ou sur
+# staging), mettre ENABLE_API_DOCS=1 dans le fichier .env.
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "0").strip().lower() in ("1", "true", "yes", "oui")

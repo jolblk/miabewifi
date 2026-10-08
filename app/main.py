@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 from app.database import engine, Base
 from app import models
 from app.limiter import limiter
-from app.config import FRONTEND_ORIGINS
+from app.config import ENABLE_API_DOCS, FRONTEND_ORIGINS
 from app.routers import auth, routers_management, wallet, admin, notifications, packs_info, support, hotspot, hotspot_public
 from app.routers import hotspot_forfaits
 from app.routers import dashboard
@@ -32,7 +32,13 @@ async def lifespan(_app: FastAPI):
     reconcile_task.cancel()
 
 
-app = FastAPI(title="MIABEWIFI", lifespan=lifespan)
+app = FastAPI(
+    title="MIABEWIFI",
+    lifespan=lifespan,
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
+)
 app.state.limiter = limiter
 
 
