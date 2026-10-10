@@ -14,7 +14,7 @@ export default function NotFound() {
                 <p className="login-sub">Cette page n'existe pas ou a été déplacée.</p>
 
                 <p className="forgot-link" style={{ textAlign: 'center', marginTop: 16 }}>
-                    <Link to="/">Retour à l'accueil</Link>
+                    <Link to="/tableau-de-bord">Retour à l'accueil</Link>
                 </p>
             </div>
         </div>

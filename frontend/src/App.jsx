@@ -31,7 +31,10 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Dashboard />} />
+            {/* L'adresse « / » est la page de présentation (servie par le serveur, hors de cette
+                application) : le tableau de bord a sa propre adresse, sinon actualiser la page
+                ramènerait sur la présentation. */}
+            <Route path="/tableau-de-bord" element={<Dashboard />} />
             <Route path="/routers" element={<Routers />} />
             <Route path="/routers/nouveau" element={<InstallWizard />} />
             <Route path="/wallet" element={<Wallet />} />
@@ -50,6 +53,7 @@ function App() {
               </Route>
             </Route>
           </Route>
+          <Route path="/" element={<Navigate to="/tableau-de-bord" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <ConfirmHost />

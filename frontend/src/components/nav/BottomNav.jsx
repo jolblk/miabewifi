@@ -11,7 +11,7 @@ export default function BottomNav({ isAdmin }) {
     return (
         <nav className="bottom-nav">
             {items.map(({ to, label, icon: Icon }) => (
-                <NavLink key={to} to={to} end={to === '/'} className="bottom-nav-item">
+                <NavLink key={to} to={to} end={to === '/tableau-de-bord'} className="bottom-nav-item">
                     <Icon size={20} strokeWidth={2} />
                     <span>{label}</span>
                 </NavLink>

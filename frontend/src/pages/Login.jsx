@@ -44,7 +44,7 @@ export default function Login() {
             } catch {
                 // navigation privée : le choix ne sera simplement pas retenu
             }
-            navigate('/', { replace: true });
+            navigate('/tableau-de-bord', { replace: true });
         } catch (err) {
             setError(getErrorMessage(err, 'Connexion impossible.'));
         } finally {

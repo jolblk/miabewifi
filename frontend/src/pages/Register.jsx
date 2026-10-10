@@ -47,7 +47,7 @@ export default function Register() {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             });
             localStorage.setItem('miabewifi_token', res.data.access_token);
-            navigate('/', { replace: true });
+            navigate('/tableau-de-bord', { replace: true });
         } catch {
             // Échec de la connexion automatique : écran « Compte créé » classique.
             setSuccess(true);

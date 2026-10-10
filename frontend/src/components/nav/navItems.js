@@ -1,7 +1,7 @@
 import { LayoutDashboard, Radio, Wallet, Lock, HelpCircle, Users, CreditCard, Ticket, UserCircle } from 'lucide-react';
 
 export const mainNavItems = [
-    { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
+    { to: '/tableau-de-bord', label: 'Tableau de bord', icon: LayoutDashboard },
     { to: '/routers', label: 'Routeurs', icon: Radio },
     { to: '/tickets', label: 'Tickets', icon: Ticket },
     { to: '/wallet', label: 'Portefeuille', icon: Wallet },
@@ -10,7 +10,7 @@ export const mainNavItems = [
 ];
 
 export const mobileNavItems = [
-    { to: '/', label: 'Accueil', icon: LayoutDashboard },
+    { to: '/tableau-de-bord', label: 'Accueil', icon: LayoutDashboard },
     { to: '/routers', label: 'Routeurs', icon: Radio },
     { to: '/tickets', label: 'Tickets', icon: Ticket },
     { to: '/wallet', label: 'Portefeuille', icon: Wallet },

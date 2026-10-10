@@ -5,7 +5,7 @@ import './Sidebar.css';
 
 function NavGroup({ items }) {
     return items.map(({ to, label, icon: Icon }) => (
-        <NavLink key={to} to={to} end={to === '/'} className="sidebar-link">
+        <NavLink key={to} to={to} end={to === '/tableau-de-bord'} className="sidebar-link">
             <Icon size={18} strokeWidth={2} />
             {label}
         </NavLink>
