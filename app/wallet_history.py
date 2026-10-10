@@ -75,7 +75,11 @@ def describe(tx, *, sale=None, purchase=None, forfait: str | None = None, router
     elif tx_type == "retrait":
         phone = getattr(tx, "telephone", None)
         titre = f"Retrait vers {network_label(tx.methode)}" + (f" {mask_phone(phone)}" if phone else "")
-        detail = STATUS_LABELS.get((tx_type, tx.statut), "")
+        retrait_frais = getattr(tx, "frais", None)
+        parts = [STATUS_LABELS.get((tx_type, tx.statut), "")]
+        if retrait_frais:
+            parts.append(f"frais {retrait_frais} F, reçu {tx.montant - retrait_frais} F")
+        detail = " · ".join(p for p in parts if p)
     elif tx_type == "recharge":
         phone = getattr(tx, "telephone", None)
         titre = f"Recharge {network_label(tx.methode)}".strip()
@@ -94,7 +98,11 @@ def describe(tx, *, sale=None, purchase=None, forfait: str | None = None, router
         "detail": detail,
         "montant": tx.montant,
         "montant_signe": signed_amount(tx_type, tx.montant),
-        "frais": getattr(sale, "frais", None) if tx_type == "vente" else None,
+        "frais": (
+            getattr(sale, "frais", None) if tx_type == "vente"
+            else getattr(tx, "frais", None) if tx_type == "retrait"
+            else None
+        ),
         "created_at": tx.created_at,
     }
 

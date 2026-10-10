@@ -48,10 +48,24 @@ class ChangePasswordRequest(BaseModel):
 
 
 class RouterCreate(BaseModel):
-    nom: str
+    nom: str = Field(min_length=1, max_length=100)
     mode: Literal["new", "existing"] = "existing"
     # Nom du Wi-Fi diffusé aux clients (mode "new" uniquement). Lettres, chiffres, espace . _ -
     wifi_ssid: Optional[str] = Field(default=None, max_length=32, pattern=r"^[A-Za-z0-9 ._-]*$")
+    # Mot de passe du compte « admin » du MikroTik, choisi par le client (mode "new", obligatoire).
+    # Un routeur neuf n'a souvent pas de mot de passe et son Wi-Fi est ouvert : sans ça, n'importe
+    # quel client du Wi-Fi pourrait en prendre le contrôle. Il n'est JAMAIS enregistré par
+    # MIABEWIFI : il est seulement placé dans le script d'installation. Caractères limités pour
+    # rester sûrs dans un script RouterOS (pas de guillemet, $, \, [ ], { }, ; ni espace).
+    admin_password: Optional[str] = Field(
+        default=None, min_length=10, max_length=64, pattern=r"^[A-Za-z0-9@#%*+=!.,:_-]+$",
+    )
+
+    @model_validator(mode="after")
+    def _new_router_needs_admin_password(self):
+        if self.mode == "new" and not self.admin_password:
+            raise ValueError("Choisissez un mot de passe pour le compte admin du routeur (10 caractères minimum).")
+        return self
 
 class PortMappingOut(BaseModel):
     service_type: str
@@ -83,8 +97,8 @@ class RouterConfigOut(BaseModel):
     config_script: str
 
 class MikrotikCredentialsUpdate(BaseModel):
-    api_username: str
-    api_password: str
+    api_username: str = Field(min_length=1, max_length=64)
+    api_password: str = Field(min_length=1, max_length=128)
 
 # Numéro mobile money : chiffres uniquement, « + » facultatif devant (même règle que l'application).
 PHONE_PATTERN = r"^\+?\d{8,15}$"
@@ -115,8 +129,9 @@ class ActivatePackRequest(BaseModel):
     pack_id: str  # "7j", "30j", "90j"
 
 class VoucherBatchCreate(BaseModel):
-    profile_name: str
-    prix_unitaire: int = Field(gt=0)
+    profile_name: str = Field(min_length=1, max_length=100)
+    # Même plafond que le prix enregistré d'un forfait (hotspot_forfaits.py).
+    prix_unitaire: int = Field(gt=0, le=1_000_000)
     quantite: int = Field(gt=0, le=500)
     # Nombre de jours de validité APRÈS la 1re connexion. Vide = pas de limite calendaire.
     validite_jours: Optional[int] = Field(default=None, ge=1, le=365)
@@ -260,12 +275,6 @@ class HotspotSetupRequest(BaseModel):
 
 
 # --- Paiement HotSpot en libre-service (page publique, sans authentification) ---
-
-class PublicHotspotPayRequest(BaseModel):
-    batch_id: int
-    telephone: str = Field(pattern=r"^\+?\d{8,15}$")
-    methode: Literal["FLOOZ", "TMONEY"]
-
 
 # Adresse MAC envoyée par la page HotSpot (variable $(mac) du MikroTik), ex: AA:BB:CC:DD:EE:FF
 MAC_PATTERN = r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"

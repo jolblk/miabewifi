@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import api from '../api/client';
 import { Check, Clock } from 'lucide-react';
 import Modal from './hotspot/Modal';
 import { formatAmount } from '../utils/format';
@@ -98,6 +99,17 @@ export function WithdrawModal({ solde, numeros, onWithdraw, onClose }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+    // Pourcentage de frais de retrait (réglé par MIABEWIFI). null = pas encore connu.
+    const [feePercent, setFeePercent] = useState(null);
+
+    useEffect(() => {
+        api.get('/wallet/frais-retrait')
+            .then((res) => setFeePercent(Number(res.data.pourcentage) || 0))
+            .catch(() => setFeePercent(null));
+    }, []);
+
+    const frais = feePercent ? Math.ceil((montant * feePercent) / 100) : 0;
+    const recu = montant - frais;
 
     const presets = [5000, 10000, 20000].filter((v) => v < solde).map((v) => ({ value: v, label: `${formatAmount(v)} F` }));
     if (solde > 0) presets.push({ value: solde, label: `Tout (${formatAmount(solde)} F)` });
@@ -107,6 +119,7 @@ export function WithdrawModal({ solde, numeros, onWithdraw, onClose }) {
         if (!valid) return setError('Choisissez ou saisissez un numéro mobile money valide.');
         if (!Number.isInteger(montant) || montant <= 0) return setError('Indiquez un montant en FCFA.');
         if (montant > solde) return setError('Le montant dépasse votre solde disponible.');
+        if (recu <= 0) return setError('Montant trop faible une fois les frais déduits.');
         if (!password) return setError('Saisissez votre mot de passe pour confirmer.');
         setBusy(true);
         setError('');
@@ -127,8 +140,11 @@ export function WithdrawModal({ solde, numeros, onWithdraw, onClose }) {
             <Modal title={pending ? 'Retrait en vérification' : 'Retrait envoyé'} onClose={onClose}>
                 <p className={pending ? 'wl-result is-warning' : 'wl-result'}>
                     {pending ? <Clock size={18} /> : <Check size={18} />}
-                    {formatAmount(montant)} F vers {target.label}
+                    {formatAmount(result.montant_recu ?? montant)} F vers {target.label}
                 </p>
+                {result.frais > 0 && (
+                    <p className="empty-hint">Débité de votre solde : {formatAmount(result.montant)} F (dont {formatAmount(result.frais)} F de frais).</p>
+                )}
                 <p className="empty-hint">{result.message}</p>
                 <div className="hs-modal-actions">
                     <button type="button" className="btn-primary" onClick={onClose}>Fermer</button>
@@ -146,7 +162,8 @@ export function WithdrawModal({ solde, numeros, onWithdraw, onClose }) {
                 <AmountPicker presets={presets} value={montant} setValue={setMontant} />
                 {valid && montant > 0 && montant <= solde && (
                     <div className="wl-summary">
-                        Vous recevrez <b>{formatAmount(montant)} F</b> sur {target.label}.
+                        Vous recevrez <b>{formatAmount(recu)} F</b> sur {target.label}.
+                        {frais > 0 && <span>Frais de retrait ({feePercent} %) : {formatAmount(frais)} F</span>}
                         <span>Solde après retrait : {formatAmount(solde - montant)} F</span>
                     </div>
                 )}

@@ -82,6 +82,9 @@ class Transaction(Base):
     type = Column(String, default="recharge")  # "recharge", "debit" ou "retrait"
     telephone = Column(String, nullable=True)  # numéro mobile money d'une recharge ou d'un retrait
     note = Column(String, nullable=True)  # motif d'un abonnement offert ou d'une correction de solde (admin)
+    # Frais prélevés sur un retrait (FCFA). `montant` = somme retirée du solde ; le client reçoit
+    # montant - frais. NULL pour les autres opérations et les retraits d'avant les frais.
+    frais = Column(Integer, nullable=True)
 
 class VoucherBatch(Base):
     __tablename__ = "voucher_batches"
@@ -156,3 +159,14 @@ class RevokedToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     token_hash = Column(String, unique=True, index=True, nullable=False)
     revoked_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PlatformSetting(Base):
+    """Réglages de la plateforme modifiables par un administrateur (ex. frais de retrait).
+    Une ligne par réglage : clé -> valeur (texte)."""
+    __tablename__ = "platform_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String, nullable=True)  # e-mail de l'administrateur qui l'a modifié

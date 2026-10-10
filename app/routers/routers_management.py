@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from app.crypto import decrypt, encrypt
@@ -20,6 +21,7 @@ from app.router_policy import (
 )
 
 router = APIRouter(prefix="/routers", tags=["Routeurs"])
+logger = logging.getLogger("miabewifi.routers")
 
 
 @router.post("/", response_model=schemas.RouterConfigOut)
@@ -109,7 +111,10 @@ def create_router(
     # collé dans Winbox.
     try:
         wg_agent.add_peer(public_key, wireguard_ip)
-    except Exception as e:
+    except Exception:
+        # Le détail technique (erreur du serveur WireGuard) va dans les journaux, jamais à
+        # l'utilisateur : il décrit l'intérieur du serveur.
+        logger.exception("wg-agent : ajout du routeur %s impossible", new_router.id)
         db.query(models.PortMapping).filter(models.PortMapping.router_id == new_router.id).delete()
         db.delete(new_router)
         if grant_trial:
@@ -117,7 +122,7 @@ def create_router(
         db.commit()
         raise HTTPException(
             status_code=502,
-            detail=f"Impossible de préparer le serveur pour ce routeur : {e}",
+            detail="Impossible de préparer le serveur pour ce routeur. Réessayez dans quelques minutes ou contactez le support.",
         )
 
     free_ips = wireguard.count_free_ips(db, models)
@@ -132,6 +137,7 @@ def create_router(
         wireguard_ip=wireguard_ip,
         api_password=api_password,
         wifi_ssid=new_router.wifi_ssid,
+        admin_password=router_data.admin_password if router_data.mode == "new" else None,
     )
 
     return {"router": new_router, "config_script": config_script}
@@ -251,6 +257,16 @@ async def get_mikrotik_status(
     return data
 
 
+def _safe_filename(name: str) -> str:
+    """Nom de fichier sans accents ni caractères spéciaux : un nom de routeur avec « ’ » ou un
+    émoji faisait planter le téléchargement, et des guillemets pouvaient casser l'en-tête."""
+    import re
+    import unicodedata
+    ascii_only = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_only).strip("-.")[:60]
+    return cleaned or "routeur"
+
+
 @router.get("/{router_id}/setup-card")
 def download_setup_card(
     router_id: int,
@@ -275,7 +291,7 @@ def download_setup_card(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=installation-{db_router.nom}.pdf"},
+        headers={"Content-Disposition": f'attachment; filename="installation-{_safe_filename(db_router.nom)}.pdf"'},
     )
 
 
@@ -341,10 +357,11 @@ def regenerate_router_config(
         if old_public_key:
             wg_agent.remove_peer(old_public_key)
         wg_agent.add_peer(public_key, db_router.wireguard_ip)
-    except Exception as e:
+    except Exception:
+        logger.exception("wg-agent : régénération du routeur %s impossible", db_router.id)
         raise HTTPException(
             status_code=502,
-            detail=f"Impossible de mettre à jour la configuration sur le serveur : {e}",
+            detail="Impossible de mettre à jour la configuration sur le serveur. Réessayez dans quelques minutes ou contactez le support.",
         )
 
     db_router.public_key = public_key

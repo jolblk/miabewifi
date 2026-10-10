@@ -18,6 +18,7 @@ from app.payouts import SUCCES, ECHEC, classify_disburse_response
 from app.alerts import alert_admins
 from app.security import verify_password
 from app import wallet_history
+from app import platform_settings
 
 from app.limiter import limiter
 router = APIRouter(prefix="/wallet", tags=["Portefeuille"])
@@ -110,6 +111,13 @@ async def retirer(
     if not verify_password(data.password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Mot de passe incorrect. Le retrait n'a pas été effectué.")
 
+    # Frais de retrait (pourcentage réglé dans l'administration) : le solde est débité du
+    # montant demandé, le client reçoit ce montant moins les frais.
+    fee_percent = platform_settings.get_withdrawal_fee_percent(db)
+    frais, net = platform_settings.withdrawal_split(data.montant, fee_percent)
+    if net <= 0:
+        raise HTTPException(status_code=400, detail="Montant trop faible : après les frais, il ne resterait rien à envoyer.")
+
     reference = f"miabewifi-retrait-{current_user.id}-{int(time.time() * 1000)}"
 
     # Verrouille la ligne utilisateur et débite tout de suite (réservation des fonds).
@@ -132,13 +140,14 @@ async def retirer(
         identifier=reference,
         type="retrait",
         telephone=data.phone_number,
+        frais=frais,
     )
     db.add(transaction)
     db.commit()
 
     outcome = await _paygate_disburse({
         "phone_number": data.phone_number,
-        "amount": data.montant,
+        "amount": net,
         "reason": f"Retrait MIABEWIFI - {current_user.email}",
         "reference": reference,
         "network": data.network,
@@ -147,7 +156,12 @@ async def retirer(
     if outcome == SUCCES:
         transaction.statut = "confirme"
         db.commit()
-        return {"message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money."}
+        return {
+            "message": "Retrait effectué avec succès. Les fonds arrivent sur votre compte mobile money.",
+            "montant": data.montant,
+            "frais": frais,
+            "montant_recu": net,
+        }
 
     if outcome == ECHEC:
         # PayGate a clairement refusé : l'argent n'est pas parti, on rembourse les fonds réservés.
@@ -174,7 +188,8 @@ async def retirer(
         "⚠️ Retrait MIABEWIFI à vérifier\n\n"
         f"Référence : {reference}\n"
         f"Client : {current_user.nom} ({current_user.email})\n"
-        f"Montant : {data.montant} FCFA vers {data.phone_number} ({data.network})\n\n"
+        f"Montant envoyé : {net} FCFA vers {data.phone_number} ({data.network}) "
+        f"— débité du solde : {data.montant} FCFA (frais {frais} FCFA)\n\n"
         "PayGate n'a pas donné de réponse claire. Vérifiez cette référence dans le tableau de bord "
         "PayGate, puis confirmez ou remboursez le retrait depuis l'admin (Transactions)."
     )
@@ -184,6 +199,9 @@ async def retirer(
             "Ne refaites pas la demande : le montant reste réservé et vous serez fixé rapidement."
         ),
         "statut": "a_verifier",
+        "montant": data.montant,
+        "frais": frais,
+        "montant_recu": net,
     }
 
 
@@ -207,7 +225,13 @@ async def _confirm_hotspot_purchase(db: Session, purchase: models.HotspotPurchas
 
     voucher = (
         db.query(models.Voucher)
-        .filter(models.Voucher.batch_id == purchase.batch_id, models.Voucher.statut == "AVAILABLE")
+        .filter(
+            models.Voucher.batch_id == purchase.batch_id,
+            models.Voucher.statut == "AVAILABLE",
+            # Jamais un ticket qui a déjà servi (ex. testé par le gérant) : le client paie un
+            # ticket neuf.
+            models.Voucher.first_login_at.is_(None),
+        )
         .with_for_update(skip_locked=True)
         .first()
     )
@@ -350,6 +374,16 @@ async def paygate_webhook(request: Request, payload: dict, db: Session = Depends
         return {"status": "already_processed"}
 
     return {"status": "ok"}
+
+
+@router.get("/frais-retrait")
+def get_withdrawal_fee(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Pourcentage de frais appliqué aux retraits (affiché avant de confirmer)."""
+    percent = platform_settings.get_withdrawal_fee_percent(db)
+    return {"pourcentage": platform_settings.percent_as_number(percent)}
 
 
 @router.get("/solde")

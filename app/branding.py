@@ -37,6 +37,20 @@ class BrandingError(ValueError):
     """Valeur de personnalisation refusée (message lisible par le client)."""
 
 
+# Nombre maximum de pixels d'une image envoyée (40 millions = ex. 8000 x 5000, bien plus que
+# n'importe quelle photo de téléphone). Un petit fichier peut annoncer une image immense qui
+# occuperait des centaines de Mo de mémoire une fois ouverte et ferait planter le serveur :
+# on vérifie la taille annoncée AVANT de décoder l'image.
+MAX_IMAGE_PIXELS = 40_000_000
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+
+def _check_dimensions(probe) -> None:
+    width, height = probe.size
+    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+        raise BrandingError("Image trop grande : utilisez une image de moins de 40 mégapixels.")
+
+
 # --- Nom ---------------------------------------------------------------------
 
 def clean_brand_name(value: str | None) -> str | None:
@@ -103,6 +117,7 @@ def process_logo(raw: bytes) -> str:
         with Image.open(io.BytesIO(raw)) as probe:
             if probe.format not in ("PNG", "JPEG"):
                 raise BrandingError("Format non pris en charge : utilisez une image PNG ou JPEG.")
+            _check_dimensions(probe)
             image = probe.convert("RGBA")
     except BrandingError:
         raise
@@ -217,6 +232,7 @@ def process_background(raw: bytes) -> tuple[bytes, str]:
         with Image.open(io.BytesIO(raw)) as probe:
             if probe.format not in ("PNG", "JPEG"):
                 raise BrandingError("Format non pris en charge : utilisez une photo JPEG ou PNG.")
+            _check_dimensions(probe)
             image = probe.convert("RGB")
     except BrandingError:
         raise

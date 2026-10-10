@@ -101,6 +101,30 @@ async def serve_react_to_browsers(request: Request, call_next):
     return await call_next(request)
 
 
+# En-têtes de sécurité standard, ajoutés à toutes les réponses (déclaré en DERNIER pour
+# englober aussi les pages renvoyées par serve_react_to_browsers) :
+# - nosniff : le navigateur ne « devine » pas le type d'un fichier (ex. image traitée comme script)
+# - DENY : l'application ne peut pas être affichée dans un cadre d'un autre site (anti-clickjacking)
+# - Referrer-Policy : les adresses (ex. lien de réinitialisation avec son jeton) ne sont jamais
+#   transmises à un autre site
+# - HSTS : le navigateur utilise toujours HTTPS (ignoré si la page est servie en HTTP)
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=15552000",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(routers_management.router)
 app.include_router(wallet.router)

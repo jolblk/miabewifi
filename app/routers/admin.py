@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app import models, wallet_history, wireguard
+from app import models, platform_settings, wallet_history, wireguard
 from app.admin_ops import (
     MAX_JOURS_OFFERTS,
     METHODE_ARRET,
@@ -72,6 +72,12 @@ def get_global_stats(db: Session = Depends(get_db), _admin=Depends(get_current_a
         models.Transaction.created_at >= month_start,
     ).scalar()
 
+    frais_retraits = db.query(func.coalesce(func.sum(models.Transaction.frais), 0)).filter(
+        models.Transaction.type == "retrait",
+        models.Transaction.statut == "confirme",
+        models.Transaction.created_at >= month_start,
+    ).scalar()
+
     retraits = (
         db.query(models.Transaction)
         .filter(models.Transaction.type == "retrait", models.Transaction.statut == "a_verifier")
@@ -91,9 +97,10 @@ def get_global_stats(db: Session = Depends(get_db), _admin=Depends(get_current_a
         "routers_actifs": len(actifs),
         "routers_en_ligne": sum(1 for r in routers if r.is_connected),
         "ventes_en_ligne_mois": ventes_en_ligne,
-        "revenus_mois": abonnements + frais,
+        "revenus_mois": abonnements + frais + frais_retraits,
         "abonnements_mois": abonnements,
         "frais_mois": frais,
+        "frais_retraits_mois": frais_retraits,
         "adresses_libres": wireguard.count_free_ips(db, models),
         "retraits_a_verifier": len(retraits),
         "plus_ancien_retrait": retraits[0].created_at if retraits else None,
@@ -421,3 +428,30 @@ def refund_withdrawal(transaction_id: int, db: Session = Depends(get_db), _admin
     user.solde = (user.solde or 0) + transaction.montant
     db.commit()
     return {"message": "Retrait annulé : le montant a été rendu au client."}
+
+
+# --- Réglages de la plateforme -------------------------------------------------------------
+
+class FeeUpdate(BaseModel):
+    frais_retrait_pourcent: float = Field(ge=0, le=20)
+
+
+@router.get("/parametres")
+def get_platform_settings(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+    percent = platform_settings.get_withdrawal_fee_percent(db)
+    return {
+        "frais_retrait_pourcent": platform_settings.percent_as_number(percent),
+        "frais_retrait_max": platform_settings.percent_as_number(platform_settings.MAX_WITHDRAWAL_FEE_PERCENT),
+    }
+
+
+@router.put("/parametres")
+def update_platform_settings(data: FeeUpdate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    """Change le pourcentage de frais des retraits. S'applique aux retraits suivants uniquement."""
+    try:
+        percent = platform_settings.set_withdrawal_fee_percent(db, data.frais_retrait_pourcent, admin.email)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    logger.info("Frais de retrait passés à %s %% par %s", percent, admin.email)
+    return {"message": "Frais de retrait enregistrés.", "frais_retrait_pourcent": platform_settings.percent_as_number(percent)}

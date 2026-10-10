@@ -22,6 +22,19 @@ function sanitizeSsid(value) {
 }
 const POLL_INTERVAL_MS = 4000;
 
+// Mêmes règles que le serveur (schemas.RouterCreate) : caractères sûrs dans un script MikroTik.
+const ADMIN_PASSWORD_RE = /^[A-Za-z0-9@#%*+=!.,:_-]{10,64}$/;
+
+function adminPasswordProblem(password, confirmation) {
+    if (password.length < 10) return 'Le mot de passe admin du routeur doit faire au moins 10 caractères.';
+    if (password.length > 64) return 'Le mot de passe admin du routeur doit faire 64 caractères au maximum.';
+    if (!ADMIN_PASSWORD_RE.test(password)) {
+        return 'Mot de passe admin : lettres sans accents, chiffres et @ # % * + = ! . , : _ - uniquement (pas d\'espace).';
+    }
+    if (password !== confirmation) return 'Les deux mots de passe admin ne sont pas identiques.';
+    return '';
+}
+
 export default function InstallWizard() {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
@@ -40,6 +53,10 @@ export default function InstallWizard() {
     const [provisionInfo, setProvisionInfo] = useState(null);
     const [packs, setPacks] = useState([]);
     const [wifiSsid, setWifiSsid] = useState('');
+    // Mot de passe du compte « admin » du routeur (routeur neuf) : jamais enregistré par
+    // MIABEWIFI, il est seulement placé dans le script d'installation.
+    const [adminPassword, setAdminPassword] = useState('');
+    const [adminPassword2, setAdminPassword2] = useState('');
     const [lanInterfaces, setLanInterfaces] = useState([]);
     const [lanInterface, setLanInterface] = useState('');
     const [helpOpen, setHelpOpen] = useState(false);
@@ -119,11 +136,21 @@ export default function InstallWizard() {
     async function handleCreate(e) {
         e.preventDefault();
         if (!nom.trim() || !mode) return;
+        if (mode === 'new') {
+            const problem = adminPasswordProblem(adminPassword, adminPassword2);
+            if (problem) {
+                setError(problem);
+                return;
+            }
+        }
         setBusy(true);
         setError('');
         try {
             const payload = { nom: nom.trim(), mode };
-            if (mode === 'new') payload.wifi_ssid = sanitizeSsid(wifiSsid.trim() || nom.trim());
+            if (mode === 'new') {
+                payload.wifi_ssid = sanitizeSsid(wifiSsid.trim() || nom.trim());
+                payload.admin_password = adminPassword;
+            }
             const res = await api.post('/routers/', payload);
             setRouter(res.data.router);
             setScript(res.data.config_script);
@@ -250,6 +277,30 @@ export default function InstallWizard() {
                                 <p className="wizard-hint wizard-hint-small">
                                     Le Wi-Fi est ouvert (sans mot de passe) : les clients se connectent, puis saisissent leur ticket.
                                 </p>
+                                <p className="wizard-hint">Nouveau mot de passe du compte « admin » de ton routeur :</p>
+                                <input
+                                    className="text-input wizard-input"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={adminPassword}
+                                    onChange={(e) => setAdminPassword(e.target.value)}
+                                    placeholder="10 caractères minimum"
+                                    maxLength={64}
+                                />
+                                <input
+                                    className="text-input wizard-input"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={adminPassword2}
+                                    onChange={(e) => setAdminPassword2(e.target.value)}
+                                    placeholder="Retape le mot de passe"
+                                    maxLength={64}
+                                />
+                                <p className="wizard-hint wizard-hint-small">
+                                    Indispensable : comme le Wi-Fi est ouvert, sans mot de passe n'importe quel client
+                                    pourrait prendre le contrôle de ton routeur. Note-le bien : MIABEWIFI ne le garde pas et
+                                    ne pourra pas te le redonner. Lettres sans accents, chiffres et @ # % * + = ! . , : _ -
+                                </p>
                             </>
                         )}
                         <button className="btn-primary wizard-btn-main" type="submit" disabled={busy || !nom.trim() || !mode}>
@@ -285,6 +336,7 @@ export default function InstallWizard() {
                     <p className="wizard-hint wizard-hint-small">
                         Connecte-toi avec "admin" (sans mot de passe, sauf si tu l'as déjà changé),
                         puis clique sur "Terminal" dans le menu de gauche.
+                        {mode === 'new' && ' Après le script, le mot de passe admin sera celui que tu viens de choisir.'}
                     </p>
                     <p className="wizard-hint">
                         Copie ensuite ce script et colle-le dans ce terminal :

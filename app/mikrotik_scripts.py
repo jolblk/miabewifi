@@ -272,6 +272,16 @@ _API_USER = """\
 /user add name=__API_USER__ group=__API_GROUP__ password="__API_PASSWORD__" address=__VPS_IP__/32
 """
 
+# Mot de passe du compte « admin » choisi par le client (routeur neuf uniquement). Un routeur
+# d'usine n'a souvent aucun mot de passe et le Wi-Fi du HotSpot est ouvert : sans cette ligne,
+# n'importe quel client du Wi-Fi pourrait prendre le contrôle du routeur.
+_ADMIN_PASSWORD = """\
+:do { /user set [find name=admin] password="__ADMIN_PASSWORD__" } on-error={}
+"""
+
+ADMIN_PASSWORD_ALLOWED = re.compile(r"^[A-Za-z0-9@#%*+=!.,:_-]{10,64}$")
+
+
 # Routeur vierge (configuration d'usine : LAN 192.168.88.0/24 sur "bridge", WAN sur ether1).
 # Chaque commande vérifie d'abord ce qui existe déjà. Le hotspot est activé EN DERNIER :
 # la page du routeur peut se couper à ce moment, c'est normal.
@@ -313,13 +323,21 @@ _HOTSPOT_ENABLE = """\
 """
 
 
-def build_config_script(*, mode: str, private_key: str, wireguard_ip: str, api_password: str, wifi_ssid: str | None = None) -> str:
+def build_config_script(
+    *, mode: str, private_key: str, wireguard_ip: str, api_password: str,
+    wifi_ssid: str | None = None, admin_password: str | None = None,
+) -> str:
     if mode not in SETUP_MODES:
         raise ValueError(f"Mode d'installation inconnu : {mode}")
+    if admin_password is not None and not ADMIN_PASSWORD_ALLOWED.match(admin_password):
+        # Déjà vérifié à la saisie (schemas.RouterCreate) ; revérifié ici car il entre dans le script.
+        raise ValueError("Mot de passe admin invalide.")
 
     parts = [_TUNNEL, _FIREWALL, _CERTIFICATE]
     parts.append(_SERVICE_NEW if mode == "new" else _SERVICE_EXISTING)
     parts.append(_API_USER)
+    if mode == "new" and admin_password:
+        parts.append(_ADMIN_PASSWORD)
     if mode == "new":
         # Le Wi-Fi puis le HotSpot sont activés EN DERNIER : si l'assistant est ouvert
         # depuis le Wi-Fi du routeur, la connexion peut se couper à ce moment.
@@ -337,6 +355,7 @@ def build_config_script(*, mode: str, private_key: str, wireguard_ip: str, api_p
         "__API_GROUP__": API_GROUP,
         "__API_PASSWORD__": api_password,
         "__SSID__": sanitize_ssid(wifi_ssid),
+        "__ADMIN_PASSWORD__": admin_password or "",
     }
     for token, value in replacements.items():
         script = script.replace(token, value)

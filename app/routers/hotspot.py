@@ -58,6 +58,16 @@ def _require_active_router(db_router: models.Router) -> None:
         )
 
 
+# Identifiant d'un élément sur le MikroTik, ex : « *1A ». Tout autre format est refusé : il
+# est placé dans l'adresse de l'appel au routeur, il ne doit pas pouvoir viser autre chose.
+_ROS_ID_RE = re.compile(r"^\*[0-9A-Fa-f]{1,8}$")
+
+
+def _check_ros_id(value: str) -> None:
+    if not _ROS_ID_RE.match(value or ""):
+        raise HTTPException(status_code=404, detail="Forfait introuvable sur ce routeur.")
+
+
 def _client_for(db_router: models.Router) -> RouterOSClient:
     return RouterOSClient(
         router_ip=db_router.wireguard_ip,
@@ -141,6 +151,7 @@ async def update_hotspot_profile(
     """Modifie la durée, les appareils simultanés et/ou la vitesse d'un forfait.
     Le nom ne change pas. Les tickets DÉJÀ générés gardent la durée qu'ils avaient à leur
     création ; seuls les prochains lots utiliseront la nouvelle durée."""
+    _check_ros_id(profile_id)
     db_router = _get_authorized_router(router_id, db, current_user)
 
     payload: dict = {}
@@ -175,6 +186,7 @@ async def delete_hotspot_profile(
 ):
     """Supprime un forfait du routeur. Si des tickets encore actifs l'utilisent,
     le routeur refusera la suppression et l'erreur sera remontée telle quelle."""
+    _check_ros_id(profile_id)
     db_router = _get_authorized_router(router_id, db, current_user)
     try:
         async with _client_for(db_router) as client:

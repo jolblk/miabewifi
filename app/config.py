@@ -17,6 +17,16 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000/static")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+# Clé qui signe les connexions et les liens de réinitialisation de mot de passe. Sans elle,
+# le serveur ne doit pas démarrer (plutôt que de tourner avec des connexions cassées).
+if not SECRET_KEY or not SECRET_KEY.strip():
+    raise ValueError("SECRET_KEY manquant dans le fichier .env")
+if len(SECRET_KEY) < 32:
+    import logging
+    logging.getLogger("miabewifi.config").warning(
+        "SECRET_KEY est courte (%s caractères) : 32 caractères aléatoires minimum recommandés.", len(SECRET_KEY)
+    )
+
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL manquant dans le fichier .env")
 

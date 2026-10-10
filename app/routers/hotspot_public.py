@@ -131,6 +131,7 @@ def list_offers(request: Request, token: str, db: Session = Depends(get_db)):
             models.VoucherBatch.router_id == db_router.id,
             models.VoucherBatch.online_sale == True,  # noqa: E712 - lots que le client propose en ligne
             models.Voucher.statut == "AVAILABLE",
+            models.Voucher.first_login_at.is_(None),  # tickets jamais utilisés uniquement
         )
         .group_by(models.Voucher.batch_id)
         .all()
@@ -189,7 +190,11 @@ async def start_payment(
 
     available = (
         db.query(func.count(models.Voucher.id))
-        .filter(models.Voucher.batch_id == batch.id, models.Voucher.statut == "AVAILABLE")
+        .filter(
+            models.Voucher.batch_id == batch.id,
+            models.Voucher.statut == "AVAILABLE",
+            models.Voucher.first_login_at.is_(None),
+        )
         .scalar()
     )
     if not available:
