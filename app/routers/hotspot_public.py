@@ -236,7 +236,7 @@ async def start_payment(
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
-                "https://paygateglobal.com/api/v1/pay",
+                f"{PAYGATE_BASE_URL}/api/v1/pay",
                 json={
                     "auth_token": PAYGATE_AUTH_TOKEN,
                     "phone_number": telephone,
