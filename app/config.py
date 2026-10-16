@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PAYGATE_AUTH_TOKEN = os.getenv("PAYGATE_AUTH_TOKEN")
+# Adresse de PayGate, ou de la Caisse quand l'application passe par elle.
+PAYGATE_BASE_URL = os.getenv("PAYGATE_BASE_URL", "https://paygateglobal.com").rstrip("/")
 DATABASE_URL = os.getenv("DATABASE_URL")
 SECRET_KEY = os.getenv("SECRET_KEY")
 

@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from app.database import get_db
 from app import models, schemas
 from app.dependencies import get_current_user
-from app.config import PAYGATE_AUTH_TOKEN, HOTSPOT_SALE_FEE_RATE
+from app.config import PAYGATE_AUTH_TOKEN, PAYGATE_BASE_URL, HOTSPOT_SALE_FEE_RATE
 from app.fees import compute_sale_split
 from app.payouts import SUCCES, ECHEC, classify_disburse_response
 from app.alerts import alert_admins
@@ -35,7 +35,7 @@ async def _paygate_disburse(payload: dict) -> str:
     try:
         async with httpx.AsyncClient(timeout=PAYGATE_DISBURSE_TIMEOUT) as client:
             response = await client.post(
-                "https://paygateglobal.com/api/v1/disburse",
+                f"{PAYGATE_BASE_URL}/api/v1/disburse",
                 json={"auth_token": PAYGATE_AUTH_TOKEN, **payload},
             )
     except Exception:
@@ -66,7 +66,7 @@ async def recharger(
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://paygateglobal.com/api/v1/pay",
+            f"{PAYGATE_BASE_URL}/api/v1/pay",
             json={
                 "auth_token": PAYGATE_AUTH_TOKEN,
                 "phone_number": data.phone_number,
@@ -358,7 +358,7 @@ async def paygate_webhook(request: Request, payload: dict, db: Session = Depends
     # Vérification server-to-server, comme sur wifi-hotspot
     async with httpx.AsyncClient() as client:
         verification = await client.post(
-            "https://paygateglobal.com/api/v2/status",
+            f"{PAYGATE_BASE_URL}/api/v2/status",
             json={"auth_token": PAYGATE_AUTH_TOKEN, "identifier": identifier},
         )
         data = verification.json()

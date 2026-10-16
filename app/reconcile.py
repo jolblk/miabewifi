@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from app import models
-from app.config import PAYGATE_AUTH_TOKEN, PURCHASE_RECONCILE_INTERVAL_SECONDS
+from app.config import PAYGATE_AUTH_TOKEN, PAYGATE_BASE_URL, PURCHASE_RECONCILE_INTERVAL_SECONDS
 from app.database import SessionLocal
 from app.routers.wallet import _confirm_hotspot_purchase, _confirm_recharge
 
@@ -37,7 +37,7 @@ async def _paygate_payment_succeeded(identifier: str) -> bool:
     """Demande à PayGate si ce paiement est réussi (status 0)."""
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.post(
-            "https://paygateglobal.com/api/v2/status",
+            f"{PAYGATE_BASE_URL}/api/v2/status",
             json={"auth_token": PAYGATE_AUTH_TOKEN, "identifier": identifier},
         )
         return response.json().get("status") == 0

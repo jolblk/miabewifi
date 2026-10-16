@@ -22,7 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.config import PAYGATE_AUTH_TOKEN
+from app.config import PAYGATE_AUTH_TOKEN, PAYGATE_BASE_URL
 from app.database import get_db
 from app.payment_guard import PHONE_LIMIT_MESSAGE, longest_window, phone_request_allowed
 from app.ros_utils import format_duration_fr, format_quota_fr, parse_ros_duration
