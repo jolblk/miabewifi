@@ -1,27 +1,15 @@
-/* Sur téléphone, la page entière ne défile jamais : seule la zone du milieu défile.
-   Le navigateur ne fait donc plus apparaître ni disparaître ses propres barres
-   (actualiser, partager, retour) pendant le défilement, et la barre du bas reste immobile,
-   comme dans une application. */
-.mobile-shell {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg);
-}
-
-/* Bandeau du haut sur téléphone : violet nuit, comme le menu latéral sur ordinateur. */
+/* Bandeau du haut sur téléphone : violet nuit, comme le menu latéral sur ordinateur.
+   La page défile normalement (comme avant la refonte) ; le bandeau reste collé en haut. */
 .mobile-header {
-    flex: none;
-    position: relative;
+    position: sticky;
+    top: 0;
     z-index: 40;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    /* Sur iPhone, le bandeau passe sous l'heure et la batterie : on ajoute leur hauteur */
-    height: calc(56px + env(safe-area-inset-top, 0px));
-    padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+    height: 56px;
+    padding: 0 16px;
     background: var(--nuit);
     color: #fff;
 }
@@ -66,11 +54,7 @@
     stroke: #fff;
 }
 
+/* Espace en bas pour que la barre du bas (et le bouton « Imprimer » qui dépasse) ne cache rien */
 .mobile-main {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-    padding: 16px 16px 32px;
+    padding: 16px 16px calc(var(--bottomnav-height) + 24px);
 }
