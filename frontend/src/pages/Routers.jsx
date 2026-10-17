@@ -15,6 +15,11 @@ const ROUTERS_TABS = [
     { key: 'tickets', label: 'Tickets hotspots', icon: Ticket },
 ];
 
+// Vue de la page Tickets écrite dans l'adresse (?vue=...) et onglet correspondant :
+// le menu peut ainsi ouvrir directement « Forfaits et prix », « Page Wi-Fi », etc.
+const VUE_TO_TAB = { direct: 'live', forfaits: 'forfaits', wifi: 'wifi', reglages: 'reglages' };
+const TAB_TO_VUE = { live: 'direct', forfaits: 'forfaits', wifi: 'wifi', reglages: 'reglages' };
+
 function statutRouteur(r) {
     const now = new Date();
     const trial = r.trial_expires_at && new Date(r.trial_expires_at) > now;
@@ -175,7 +180,8 @@ export default function Routers() {
             {activeTab === 'tickets' && (
                 <HotspotTickets
                     onGoToRouters={() => setActiveTab('routers')}
-                    initialTab={searchParams.get('vue') === 'direct' ? 'live' : undefined}
+                    initialTab={VUE_TO_TAB[searchParams.get('vue')] || 'tickets'}
+                    onTabChange={(t) => navigate(TAB_TO_VUE[t] ? `/tickets?vue=${TAB_TO_VUE[t]}` : '/tickets', { replace: true })}
                     initialRequest={
                         searchParams.get('action') || searchParams.get('routeur')
                             ? {

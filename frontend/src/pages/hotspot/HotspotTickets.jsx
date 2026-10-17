@@ -25,14 +25,15 @@ const TABS = [
 
 // Page « Tickets hotspots » : chiffres clés, vente rapide, création guidée,
 // et quatre onglets pour séparer le quotidien des réglages.
-export default function HotspotTickets({ onGoToRouters, initialTab, initialRequest, onRequestHandled }) {
+export default function HotspotTickets({ onGoToRouters, initialTab, initialRequest, onRequestHandled, onTabChange }) {
     const data = useHotspotDashboard();
     const {
         routers, selectedRouterId, setSelectedRouterId, batches, profiles, settings, loading, error,
         routerStatuses, forfaitSettings, sales, connectedClients, currentRateLimit,
     } = data;
 
-    const [tab, setTab] = useState(initialTab || 'tickets');
+    // L'onglet affiché suit l'adresse (?vue=...) : le menu comme les onglets changent l'adresse.
+    const tab = initialTab || 'tickets';
     const [busy, setBusy] = useState(false);
     const [actionError, setActionError] = useState('');
     const [actionInfo, setActionInfo] = useState('');
@@ -45,6 +46,13 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
     // Demande venue d'un raccourci (tableau de bord) : choisir un routeur, puis ouvrir la vente
     // ou la création de tickets une fois les données de ce routeur chargées.
     const [pendingRequest, setPendingRequest] = useState(initialRequest || null);
+    // Nouvelle demande alors que la page est déjà ouverte (ex. « Imprimer des tickets » dans le menu).
+    const requestKey = initialRequest ? JSON.stringify(initialRequest) : '';
+    const [lastRequestKey, setLastRequestKey] = useState(requestKey);
+    if (requestKey !== lastRequestKey) {
+        setLastRequestKey(requestKey);
+        if (requestKey) setPendingRequest(JSON.parse(requestKey));
+    }
     useEffect(() => {
         if (!pendingRequest || routers.length === 0) return;
         const wanted = pendingRequest.routerId && routers.some((r) => r.id === pendingRequest.routerId)
@@ -78,6 +86,11 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
     function onMessage(err, info) {
         setActionError(err);
         setActionInfo(info);
+    }
+
+    function changeTab(key) {
+        onMessage('', '');
+        if (onTabChange) onTabChange(key);
     }
 
     function selectRouter(id) {
@@ -156,7 +169,7 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
                 <div className="hs-stat"><span>Tickets disponibles</span><b>{formatAmount(stats.disponibles)}</b></div>
                 <div className="hs-stat"><span>Vendus aujourd'hui</span><b>{formatAmount(stats.vendusAujourdhui)}</b></div>
                 <div className="hs-stat"><span>Recettes du mois</span><b>{formatAmount(stats.recettesMois)} F</b></div>
-                <button type="button" className="hs-stat hs-stat-btn" onClick={() => { setTab('live'); onMessage('', ''); }} title="Voir les clients connectés">
+                <button type="button" className="hs-stat hs-stat-btn" onClick={() => changeTab('live')} title="Voir les clients connectés">
                     <span>Clients connectés</span><b>{connectedClients === null ? '—' : connectedClients}</b>
                 </button>
             </div>
@@ -169,7 +182,7 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
                         role="tab"
                         aria-selected={tab === t.key}
                         className={`hs-tab${tab === t.key ? ' is-on' : ''}`}
-                        onClick={() => { setTab(t.key); onMessage('', ''); }}
+                        onClick={() => changeTab(t.key)}
                     >
                         {t.label}
                     </button>
@@ -264,7 +277,7 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
                     onSavePrice={data.saveForfaitSetting}
                     onSetOnline={data.setBatchOnlineSale}
                     onDownload={data.downloadBatchPdf}
-                    onNewForfait={() => { setWizardProfile(undefined); setTab('forfaits'); setForfaitEdit({}); }}
+                    onNewForfait={() => { setWizardProfile(undefined); changeTab('forfaits'); setForfaitEdit({}); }}
                     onClose={() => setWizardProfile(undefined)}
                 />
             )}
