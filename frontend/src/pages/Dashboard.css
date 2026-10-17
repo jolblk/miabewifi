@@ -189,3 +189,189 @@
     .db-router-clients { width: auto; margin-left: 22px; }
     .db-router-sales { width: auto; margin-left: auto; flex-direction: row; gap: 4px; align-items: baseline; }
 }
+
+/* --- Accueil (refonte 2026) : préfixe home- --- */
+.home {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 1040px;
+}
+
+/* Bandeau violet nuit : solde, ventes du jour, clients connectés */
+.home-hero {
+    background: var(--nuit);
+    color: #fff;
+    border-radius: 16px;
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+}
+
+.home-hero-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.home-hello {
+    font-size: 13px;
+    color: var(--nuit-text);
+}
+
+.home-balance {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.home-balance b {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.home-balance span {
+    font-size: 14px;
+    color: var(--nuit-text);
+}
+
+.home-router-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--nuit-text);
+}
+
+.home-minis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.home-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--nuit-line);
+    border-radius: 12px;
+    background: var(--nuit-2);
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.home-mini span {
+    font-size: 12px;
+    color: var(--nuit-text);
+}
+
+.home-mini b {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.home-mini small {
+    font-size: 11px;
+}
+
+.home-up {
+    color: #6ee7b7;
+}
+
+.home-down {
+    color: #fca5a5;
+}
+
+/* Les deux gestes principaux */
+.home-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.home-actions>button {
+    justify-content: center;
+    min-height: 48px;
+}
+
+.home-card-title {
+    font-size: 16px;
+    margin: 0 0 4px;
+}
+
+.db-tasks .home-card-title {
+    padding-top: 12px;
+}
+
+.home-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+}
+
+.home-row:first-of-type {
+    border-top: 0;
+}
+
+.home-row span {
+    display: flex;
+    flex-direction: column;
+}
+
+.home-row small {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.home-row b {
+    font-variant-numeric: tabular-nums;
+}
+
+.home-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+@media (min-width: 768px) {
+    .home-hero {
+        grid-template-columns: minmax(0, 1fr) minmax(320px, auto);
+        align-items: end;
+        padding: 22px 24px;
+    }
+
+    .home-actions {
+        grid-template-columns: repeat(2, max-content);
+    }
+
+    .home-actions>button {
+        padding-left: 22px;
+        padding-right: 22px;
+    }
+
+    .home-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+}

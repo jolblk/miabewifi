@@ -1,5 +1,5 @@
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, Plus, Ticket } from 'lucide-react';
+import { ArrowUpRight, Printer } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { routerHealth } from './hotspot/hotspotUtils';
 import './Dashboard.css';
@@ -61,7 +61,7 @@ function buildTasks({ routers, statuses, resume, reserve, now }) {
                 ? `Plus aucun ticket « ${s.forfait} » sur ${r.nom}`
                 : `Plus que ${s.disponibles} ticket${s.disponibles > 1 ? 's' : ''} « ${s.forfait} » sur ${r.nom}`,
             hint: `${formatAmount(s.prix)} F le ticket`,
-            action: 'Créer des tickets',
+            action: 'Imprimer des tickets',
             to: `/tickets?action=creer&routeur=${r.id}&forfait=${encodeURIComponent(s.profile_name)}`,
         });
     });
@@ -104,35 +104,77 @@ export default function Dashboard() {
     const totalClients = clientValues.length ? clientValues.reduce((a, b) => a + b, 0) : null;
     const trend = resume && resume.hier > 0 ? Math.round(((resume.aujourdhui - resume.hier) / resume.hier) * 100) : null;
     const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const hasRouters = routers.length > 0;
+    // Avec un seul routeur, son état tient en une ligne dans le bandeau : pas besoin de la liste.
+    const single = routers.length === 1 ? routers[0] : null;
+    const singleHealth = single ? routerHealth(single, statuses[single.id]) : null;
+    // Détail des ventes du jour, seulement s'il y en a eu.
+    const breakdown = [
+        { key: 'imprimes', label: 'Tickets imprimés utilisés', data: resume?.imprimes },
+        { key: 'en_ligne', label: 'Achats en ligne', data: resume?.en_ligne },
+    ].filter((line) => line.data && line.data.tickets > 0);
 
     return (
-        <div className="db-page">
-            <div className="db-head">
-                <div>
-                    <h1 className="page-title db-title">Bonjour {user?.nom}</h1>
-                    <span className="empty-hint db-sub">
-                        {today.charAt(0).toUpperCase() + today.slice(1)}
-                        {routers.length > 0 ? ` · ${routers.length} routeur${routers.length > 1 ? 's' : ''}` : ''}
+        <div className="home">
+            <section className="home-hero">
+                <div className="home-hero-main">
+                    <span className="home-hello">
+                        Bonjour {user?.nom} · {today}
                     </span>
+                    <button type="button" className="home-balance" onClick={() => navigate('/wallet')}>
+                        <b>{solde === null ? '--' : formatAmount(solde)}</b>
+                        <span>F disponibles</span>
+                    </button>
+                    {single && singleHealth && (
+                        <span className="home-router-line">
+                            <span className={`db-dot db-dot-${singleHealth.color}`} aria-hidden="true" />
+                            {single.nom} · {routerSubtitle(single, singleHealth, now)}
+                        </span>
+                    )}
                 </div>
-                {routers.length > 0 && (
-                    <div className="db-actions">
-                        <button type="button" className="btn-primary" onClick={() => navigate('/tickets?action=vendre')}>
-                            <Ticket size={16} /> Vendre un ticket
+                {hasRouters && (
+                    <div className="home-minis">
+                        <button type="button" className="home-mini" onClick={() => navigate('/tickets')}>
+                            <span>Vendu aujourd'hui</span>
+                            <b>{resume ? `${formatAmount(resume.aujourdhui)} F` : '--'}</b>
+                            {trend !== null && (
+                                <small className={trend >= 0 ? 'home-up' : 'home-down'}>
+                                    {trend >= 0 ? '+' : '−'} {Math.abs(trend)} % par rapport à hier
+                                </small>
+                            )}
                         </button>
-                        <button type="button" className="btn-secondary" onClick={() => navigate('/tickets?action=creer')}>
-                            <Plus size={16} /> Créer des tickets
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={() => navigate('/wallet?action=retirer')}>
-                            <ArrowUpRight size={16} /> Retirer
+                        <button type="button" className="home-mini" onClick={() => navigate('/tickets?vue=direct')}>
+                            <span>Clients connectés</span>
+                            <b>{totalClients === null ? '—' : totalClients}</b>
                         </button>
                     </div>
                 )}
-            </div>
+            </section>
 
-            {!loading && routers.length > 0 && (
-                tasks.length > 0 ? (
+            {hasRouters && (
+                <div className="home-actions">
+                    <button type="button" className="btn-primary" onClick={() => navigate('/tickets?action=creer')}>
+                        <Printer size={18} /> Imprimer des tickets
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => navigate('/wallet?action=retirer')}>
+                        <ArrowUpRight size={18} /> Retirer mon argent
+                    </button>
+                </div>
+            )}
+
+            {!loading && !hasRouters && (
+                <div className="section-card empty-router-state">
+                    <p className="empty-hint">Ajoutez votre premier routeur pour commencer à vendre des tickets Wi-Fi.</p>
+                    <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
+                        Ajouter mon premier routeur
+                    </button>
+                </div>
+            )}
+
+            <div className="home-grid">
+                {tasks.length > 0 && (
                     <div className="section-card db-tasks">
+                        <h2 className="home-card-title">À faire</h2>
                         {tasks.map((t, i) => (
                             <div key={i} className="db-task">
                                 <span className={`db-dot db-dot-${t.level}`} aria-hidden="true" />
@@ -144,74 +186,52 @@ export default function Dashboard() {
                             </div>
                         ))}
                     </div>
-                ) : (
-                    <div className="section-card db-ok">
-                        <CheckCircle2 size={18} /> Tout est en ordre : routeurs en ligne, abonnements à jour, stock suffisant.
-                    </div>
-                )
-            )}
+                )}
 
-            <div className="db-kpis">
-                <button type="button" className="db-kpi" onClick={() => navigate('/tickets')}>
-                    <span>Recettes aujourd'hui</span>
-                    <b>{resume ? `${formatAmount(resume.aujourdhui)} F` : '--'}</b>
-                    {trend !== null && (
-                        <small className={trend >= 0 ? 'db-up' : 'db-down'}>
-                            {trend >= 0 ? '+' : '−'} {Math.abs(trend)} % par rapport à hier
-                        </small>
-                    )}
-                </button>
-                <button type="button" className="db-kpi" onClick={() => navigate('/tickets')}>
-                    <span>Tickets vendus aujourd'hui</span>
-                    <b>{resume ? formatAmount(resume.tickets_aujourdhui) : '--'}</b>
-                </button>
-                <button type="button" className="db-kpi" onClick={() => navigate('/tickets?vue=direct')}>
-                    <span>Clients connectés</span>
-                    <b>{totalClients === null ? '—' : totalClients}</b>
-                </button>
-                <button type="button" className="db-kpi" onClick={() => navigate('/wallet')}>
-                    <span>Solde disponible</span>
-                    <b>{solde === null ? '--' : `${formatAmount(solde)} F`}</b>
-                </button>
-            </div>
-
-            <div className="section-card">
-                <div className="section-header">
-                    <h2>Mes routeurs</h2>
-                    {routers.length > 0 && (
-                        <button className="btn-secondary db-small" onClick={() => navigate('/routers')}>Voir tout</button>
-                    )}
-                </div>
-                {!loading && routers.length === 0 ? (
-                    <div className="empty-router-state">
-                        <p className="empty-hint">Ajoutez votre premier routeur pour commencer à vendre des tickets Wi-Fi.</p>
-                        <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
-                            Ajouter mon premier routeur
-                        </button>
+                {breakdown.length > 0 && (
+                    <div className="section-card">
+                        <h2 className="home-card-title">Aujourd'hui</h2>
+                        {breakdown.map((line) => (
+                            <div key={line.key} className="home-row">
+                                <span>
+                                    {line.label}
+                                    <small>{line.data.tickets} ticket{line.data.tickets > 1 ? 's' : ''}</small>
+                                </span>
+                                <b>{formatAmount(line.data.montant)} F</b>
+                            </div>
+                        ))}
                     </div>
-                ) : (
-                    <div className="db-routers">
-                        {routers.map((r) => {
-                            const health = routerHealth(r, statuses[r.id]);
-                            const day = resume?.par_routeur?.[String(r.id)];
-                            const n = clients[r.id];
-                            return (
-                                <button key={r.id} type="button" className="db-router" onClick={() => navigate(`/tickets?routeur=${r.id}`)}>
-                                    <span className={`db-dot db-dot-${health.color}`} aria-hidden="true" />
-                                    <span className="db-router-name">
-                                        <strong>{r.nom}</strong>
-                                        <span>{routerSubtitle(r, health, now)}</span>
-                                    </span>
-                                    <span className="db-router-clients">
-                                        {typeof n === 'number' ? `${n} connecté${n > 1 ? 's' : ''}` : '—'}
-                                    </span>
-                                    <span className="db-router-sales">
-                                        <strong>{formatAmount(day?.aujourdhui || 0)} F</strong>
-                                        <span>aujourd'hui</span>
-                                    </span>
-                                </button>
-                            );
-                        })}
+                )}
+
+                {routers.length >= 2 && (
+                    <div className="section-card">
+                        <div className="section-header">
+                            <h2 className="home-card-title">Mes routeurs</h2>
+                            <button className="btn-secondary db-small" onClick={() => navigate('/routers')}>Voir tout</button>
+                        </div>
+                        <div className="db-routers">
+                            {routers.map((r) => {
+                                const health = routerHealth(r, statuses[r.id]);
+                                const day = resume?.par_routeur?.[String(r.id)];
+                                const n = clients[r.id];
+                                return (
+                                    <button key={r.id} type="button" className="db-router" onClick={() => navigate(`/tickets?routeur=${r.id}`)}>
+                                        <span className={`db-dot db-dot-${health.color}`} aria-hidden="true" />
+                                        <span className="db-router-name">
+                                            <strong>{r.nom}</strong>
+                                            <span>{routerSubtitle(r, health, now)}</span>
+                                        </span>
+                                        <span className="db-router-clients">
+                                            {typeof n === 'number' ? `${n} connecté${n > 1 ? 's' : ''}` : '—'}
+                                        </span>
+                                        <span className="db-router-sales">
+                                            <strong>{formatAmount(day?.aujourdhui || 0)} F</strong>
+                                            <span>aujourd'hui</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
