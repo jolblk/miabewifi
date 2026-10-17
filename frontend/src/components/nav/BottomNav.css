@@ -1,9 +1,8 @@
-/* Barre du bas sur téléphone : 5 cases, le bouton « Imprimer » au centre dépasse vers le haut. */
+/* Barre du bas sur téléphone : 5 cases, le bouton « Imprimer » au centre dépasse vers le haut.
+   Elle est posée en bas du cadre de l'application (voir AppLayout.css), sans « position: fixed ». */
 .bottom-nav {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    flex: none;
+    position: relative;
     z-index: 50;
     display: grid;
     grid-template-columns: repeat(5, 1fr);

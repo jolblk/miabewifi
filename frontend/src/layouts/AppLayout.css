@@ -1,7 +1,19 @@
+/* Sur téléphone, la page entière ne défile jamais : seule la zone du milieu défile.
+   Le navigateur ne fait donc plus apparaître ni disparaître ses propres barres
+   (actualiser, partager, retour) pendant le défilement, et la barre du bas reste immobile,
+   comme dans une application. */
+.mobile-shell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+}
+
 /* Bandeau du haut sur téléphone : violet nuit, comme le menu latéral sur ordinateur. */
 .mobile-header {
-    position: sticky;
-    top: 0;
+    flex: none;
+    position: relative;
     z-index: 40;
     display: flex;
     align-items: center;
@@ -54,5 +66,10 @@
 }
 
 .mobile-main {
-    padding: 16px 16px calc(var(--bottomnav-height) + 24px);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 16px 32px;
 }
