@@ -179,3 +179,75 @@
     margin-top: 16px;
     width: 100%;
 }
+
+/* Fin de l'installation : prix des forfaits et premiers tickets */
+.wizard-prices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 8px 0 16px;
+    text-align: left;
+}
+
+.wizard-prices h2 {
+    font-size: 18px;
+}
+
+.wizard-price-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.wizard-price-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    font-weight: 600;
+}
+
+.wizard-price-row:first-child {
+    border-top: none;
+}
+
+.wizard-price-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.wizard-price-input .text-input {
+    width: 96px;
+    text-align: right;
+    font-weight: 600;
+}
+
+.wizard-prices-cta {
+    width: 100%;
+    justify-content: center;
+    min-height: 48px;
+    font-size: 15px;
+}
+
+.wizard-subscription {
+    margin-top: 8px;
+    text-align: left;
+}
+
+.wizard-subscription summary {
+    cursor: pointer;
+    color: var(--violet);
+    font-weight: 600;
+    padding: 8px 0;
+}
+
+.wizard-subscription .wizard-packs {
+    margin-top: 8px;
+}

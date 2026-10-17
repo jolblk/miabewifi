@@ -4,14 +4,15 @@ import { Copy, Check, Loader2, Wifi, PartyPopper } from 'lucide-react';
 import api from '../api/client';
 import { confirmDialog } from '../utils/confirm';
 import './InstallWizard.css';
-import { formatAmount } from '../utils/format';
+import { formatAmount, formatDate } from '../utils/format';
+import FirstPrices from './install/FirstPrices';
 import { getErrorMessage } from '../utils/errorMessage';
 
 const STEP_LABELS = {
     1: "création du routeur",
     2: "collage du script (navigateur ou Winbox)",
     3: "attente de connexion du routeur",
-    4: "choix du forfait",
+    4: "prix et premiers tickets",
 };
 
 const RECOMMENDED_PACK_ID = '30j';
@@ -33,6 +34,26 @@ function adminPasswordProblem(password, confirmation) {
     }
     if (password !== confirmation) return 'Les deux mots de passe admin ne sont pas identiques.';
     return '';
+}
+
+// Liste des abonnements proposés à la fin de l'installation.
+function PackList({ packs, busy, onPick }) {
+    return (
+        <div className="wizard-packs">
+            {packs.map((p) => (
+                <button
+                    key={p.id}
+                    className={`wizard-pack-card ${p.id === RECOMMENDED_PACK_ID ? 'is-recommended' : ''}`}
+                    disabled={busy}
+                    onClick={() => onPick(p.id)}
+                >
+                    {p.id === RECOMMENDED_PACK_ID && <span className="wizard-pack-badge">Recommandé</span>}
+                    <span className="wizard-pack-label">{p.label}</span>
+                    <span className="wizard-pack-price">{formatAmount(p.montant)} FCFA</span>
+                </button>
+            ))}
+        </div>
+    );
 }
 
 export default function InstallWizard() {
@@ -58,6 +79,8 @@ export default function InstallWizard() {
     const [adminPassword, setAdminPassword] = useState('');
     const [adminPassword2, setAdminPassword2] = useState('');
     const [lanInterfaces, setLanInterfaces] = useState([]);
+    // Abonnement activé pendant l'installation : on passe alors aux prix et aux premiers tickets.
+    const [packDone, setPackDone] = useState(false);
     const [lanInterface, setLanInterface] = useState('');
     const [helpOpen, setHelpOpen] = useState(false);
     const [helpMessage, setHelpMessage] = useState('');
@@ -213,7 +236,7 @@ export default function InstallWizard() {
         setError('');
         try {
             await api.post(`/routers/${router.id}/activer-pack`, { pack_id: packId });
-            navigate('/routers');
+            setPackDone(true);
         } catch (err) {
             setError(getErrorMessage(err, "Erreur lors de l'activation du pack."));
         } finally {
@@ -425,7 +448,7 @@ export default function InstallWizard() {
             {step === 4 && (
                 <div className="wizard-card">
                     <PartyPopper size={40} className="wizard-success-icon" />
-                    <h1>Choisis ton forfait</h1>
+                    <h1>Ton routeur est prêt</h1>
                     {provisionInfo && !provisionInfo.hotspot_present && (
                         <div>
                             <p className="error-text">
@@ -457,27 +480,34 @@ export default function InstallWizard() {
                             )}
                         </div>
                     )}
-                    <p className="wizard-hint">
-                        {hasTrial
-                            ? 'Ton essai gratuit de 3 jours est déjà actif — le forfait prend le relais après.'
-                            : "L'essai gratuit a déjà été utilisé sur ton compte : active un forfait pour générer et vendre des tickets."} — le forfait prend le relais après.
-                    </p>
-                    <div className="wizard-packs">
-                        {packs.map((p) => (
-                            <button
-                                key={p.id}
-                                className={`wizard-pack-card ${p.id === RECOMMENDED_PACK_ID ? 'is-recommended' : ''}`}
-                                disabled={busy}
-                                onClick={() => handleActiverPack(p.id)}
-                            >
-                                {p.id === RECOMMENDED_PACK_ID && <span className="wizard-pack-badge">Recommandé</span>}
-                                <span className="wizard-pack-label">{p.label}</span>
-                                <span className="wizard-pack-price">{formatAmount(p.montant)} FCFA</span>
-                            </button>
-                        ))}
-                    </div>
-                    <button className="btn-secondary wizard-later-btn" onClick={() => navigate('/routers')}>
-                        {hasTrial ? 'Plus tard — profiter de mon essai gratuit' : 'Plus tard'}
+                    {(!provisionInfo || provisionInfo.hotspot_present) && (hasTrial || packDone) && (
+                        <FirstPrices routerId={router.id} onDone={(to) => navigate(to)} />
+                    )}
+
+                    {!packDone && hasTrial && (
+                        <details className="wizard-subscription">
+                            <summary>Choisir mon abonnement maintenant</summary>
+                            <p className="wizard-hint">
+                                Ton essai gratuit est actif jusqu'au {formatDate(router.trial_expires_at)}.
+                                Tu pourras aussi choisir ton abonnement plus tard, depuis « Mes routeurs ».
+                            </p>
+                            <PackList packs={packs} busy={busy} onPick={handleActiverPack} />
+                        </details>
+                    )}
+
+                    {!packDone && !hasTrial && (
+                        <div className="wizard-subscription">
+                            <p className="wizard-hint">
+                                L'essai gratuit a déjà été utilisé sur ton compte : active un abonnement pour imprimer et vendre des tickets.
+                            </p>
+                            <PackList packs={packs} busy={busy} onPick={handleActiverPack} />
+                        </div>
+                    )}
+
+                    {packDone && <p className="success-text">Abonnement activé.</p>}
+
+                    <button className="btn-secondary wizard-later-btn" onClick={() => navigate('/tableau-de-bord')}>
+                        Plus tard — aller à l'accueil
                     </button>
                 </div>
             )}
