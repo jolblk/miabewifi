@@ -1,0 +1,58 @@
+/* Bandeau du haut sur téléphone : violet nuit, comme le menu latéral sur ordinateur. */
+.mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: 56px;
+    padding: 0 16px;
+    background: var(--nuit);
+    color: #fff;
+}
+
+.mobile-logo {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #fff;
+}
+
+.mobile-logo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.mobile-header-actions {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Loupe et cloche en version sombre dans le bandeau */
+.mobile-header .notif-bell,
+.mobile-header .search-bar:not(.expanded) {
+    background: var(--nuit-2);
+    border-color: var(--nuit-line);
+    color: #fff;
+}
+
+.mobile-header .search-bar:not(.expanded) .search-icon {
+    stroke: #fff;
+}
+
+.mobile-main {
+    padding: 16px 16px calc(var(--bottomnav-height) + 24px);
+}

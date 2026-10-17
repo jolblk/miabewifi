@@ -1,20 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { LogOut, Printer, HelpCircle } from 'lucide-react';
-import { sidebarGroups, adminNavItems } from './navItems';
+import { sidebarGroups, adminNavItems, isActive } from './navItems';
 import './Sidebar.css';
-
-// Un élément est actif quand l'adresse affichée correspond à sa page
-// (et, pour la page Tickets, à sa vue : forfaits, page Wi-Fi, etc.).
-function isActive(to, location) {
-    const [path, query = ''] = to.split('?');
-    const current = location.pathname;
-    const exact = path === '/tableau-de-bord' || path === '/admin';
-    if (exact ? current !== path : current !== path && !current.startsWith(`${path}/`)) return false;
-    if (path === '/tickets') {
-        return new URLSearchParams(query).get('vue') === new URLSearchParams(location.search).get('vue');
-    }
-    return true;
-}
 
 function SideLink({ to, label, icon: Icon, location }) {
     const active = isActive(to, location);

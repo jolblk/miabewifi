@@ -1,4 +1,4 @@
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, Link } from 'react-router-dom';
 import { useViewport } from '../hooks/useViewport';
 import { useAuth } from '../hooks/useAuth';
 import BottomNav from '../components/nav/BottomNav';
@@ -6,6 +6,7 @@ import Sidebar from '../components/nav/Sidebar';
 import NotificationsBell from '../components/NotificationsBell';
 import SearchBar from '../components/SearchBar';
 import { confirmDialog } from '../utils/confirm';
+import './AppLayout.css';
 
 export default function AppLayout() {
     const { isMobile } = useViewport();
@@ -25,14 +26,20 @@ export default function AppLayout() {
     if (isMobile) {
         return (
             <div>
-                <main style={{ padding: '16px 16px calc(var(--bottomnav-height) + 16px)' }}>
-                    <div className="app-topbar">
+                <header className="mobile-header">
+                    <Link to="/tableau-de-bord" className="mobile-logo">
+                        <span className="mobile-logo-dot" aria-hidden="true" />
+                        MIABEWIFI
+                    </Link>
+                    <div className="mobile-header-actions">
                         <SearchBar />
                         <NotificationsBell />
                     </div>
+                </header>
+                <main className="mobile-main">
                     <Outlet context={{ user, isAdmin, logout: handleLogout }} />
                 </main>
-                <BottomNav isAdmin={isAdmin} />
+                <BottomNav isAdmin={isAdmin} onLogout={handleLogout} />
             </div>
         );
     }
