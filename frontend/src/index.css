@@ -7,6 +7,14 @@
   --warning: #b45309;
   --danger: #dc2626;
 
+  /* Menu latéral et bandeau mobile (disposition inspirée de RappelMoi) */
+  --nuit: #1c1233;
+  --nuit-2: #2a1d4a;
+  --nuit-line: #3a2b5e;
+  --nuit-text: #cfc6e6;
+  --nuit-muted: #8e80b4;
+  --accent: #2dd4bf;
+
   --text: #1e1b2e;
   --text-muted: #6b6478;
   --border: #e4e1ec;
@@ -184,5 +192,16 @@ input {
   body .select-input,
   body .search-bar input {
     font-size: 16px;
+  }
+}
+
+/* Sur téléphone, boutons d'au moins 44 px de haut : plus faciles à toucher avec le pouce */
+@media (max-width: 767px) {
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    min-height: 44px;
+    justify-content: center;
   }
 }
