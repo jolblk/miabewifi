@@ -126,3 +126,30 @@
     .wl-top { grid-template-columns: 1fr; }
     .wl-actions > button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* Mon argent : le solde dans un bandeau violet nuit, comme sur l'accueil */
+.wl-hero {
+    background: var(--nuit);
+    border-color: var(--nuit);
+    color: #fff;
+}
+
+.wl-hero .wl-label,
+.wl-hero .wl-balance small {
+    color: var(--nuit-text);
+}
+
+.wl-hero .wl-reserved {
+    color: #fcd34d;
+    background: rgba(252, 211, 77, 0.14);
+}
+
+.wl-hero .btn-secondary {
+    background: var(--nuit-2);
+    border-color: var(--nuit-line);
+    color: #fff;
+}
+
+.wl-hero .btn-secondary:hover {
+    background: var(--nuit-line);
+}

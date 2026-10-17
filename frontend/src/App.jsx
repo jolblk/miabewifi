@@ -9,7 +9,6 @@ import Dashboard from './pages/Dashboard';
 import Routers from './pages/Routers';
 import InstallWizard from './pages/InstallWizard';
 import Wallet from './pages/Wallet';
-import Profile from './pages/Profile';
 import Support from './pages/Support';
 import Account from './pages/Account';
 import AdminOverview from './pages/admin/AdminOverview';
@@ -38,7 +37,7 @@ function App() {
             <Route path="/routers" element={<Routers />} />
             <Route path="/routers/nouveau" element={<InstallWizard />} />
             <Route path="/wallet" element={<Wallet />} />
-            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile" element={<Navigate to="/account" replace />} />
             <Route path="/support" element={<Support />} />
             <Route path="/account" element={<Account />} />
             <Route path="/hotspot" element={<Navigate to="/routers" replace />} />

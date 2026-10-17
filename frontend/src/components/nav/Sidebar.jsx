@@ -56,7 +56,7 @@ export default function Sidebar({ user, isAdmin, onLogout }) {
             <div className="sidebar-bottom">
                 <SideLink to="/support" label="Aide" icon={HelpCircle} location={location} />
                 <div className="sidebar-user">
-                    <Link to="/profile" className={`sidebar-user-link${onAccount ? ' active' : ''}`}>
+                    <Link to="/account" className={`sidebar-user-link${onAccount ? ' active' : ''}`}>
                         <span className="sidebar-avatar" aria-hidden="true">{initials(user?.nom)}</span>
                         <span className="sidebar-user-text">
                             <strong>{user?.nom || 'Mon compte'}</strong>

@@ -36,7 +36,7 @@ export default function Support() {
 
     return (
         <div>
-            <h1 className="page-title">Support</h1>
+            <h1 className="page-title">Aide</h1>
             <p className="greeting">Une question ou un problème ? Écrivez-nous, nous répondons rapidement.</p>
 
             <div className="section-card">

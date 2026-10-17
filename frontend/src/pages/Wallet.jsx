@@ -90,11 +90,11 @@ export default function Wallet() {
 
     return (
         <div className="wl-page">
-            <h1 className="page-title">Portefeuille</h1>
+            <h1 className="page-title">Mon argent</h1>
             {error && <p className="error-text">{error}</p>}
 
             <div className="wl-top">
-                <div className="section-card">
+                <div className="section-card wl-hero">
                     <span className="wl-label">Solde disponible</span>
                     <div className="wl-balance">{solde === null ? '--' : formatAmount(solde)} <small>F</small></div>
                     {resume?.reserve > 0 && (
@@ -104,7 +104,7 @@ export default function Wallet() {
                     )}
                     <div className="wl-actions">
                         <button type="button" className="btn-primary" onClick={() => setModal('retrait')} disabled={!solde}>
-                            <ArrowUpRight size={16} /> Retirer
+                            <ArrowUpRight size={16} /> Retirer mon argent
                         </button>
                         <button type="button" className="btn-secondary" onClick={() => setModal('recharge')}>
                             <ArrowDownLeft size={16} /> Recharger

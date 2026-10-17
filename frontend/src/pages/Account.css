@@ -24,3 +24,17 @@
     color: #fff;
     border-color: var(--violet);
 }
+
+/* Mon compte : aide et déconnexion côte à côte (l'un sous l'autre sur téléphone) */
+.account-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 767px) {
+    .account-actions>* {
+        flex: 1 1 100%;
+        justify-content: center;
+    }
+}
