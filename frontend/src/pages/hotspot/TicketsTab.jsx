@@ -20,7 +20,7 @@ function CodeChip({ voucher, busy, onSell, onDelete }) {
             {ticketBadges(voucher).map((b) => (
                 <span key={b.label} className={`badge ${b.cls}`}>{b.label}</span>
             ))}
-            {isAvailable(voucher) && (
+            {onSell && isAvailable(voucher) && (
                 <button type="button" className="hs-mini-btn" disabled={busy} onClick={() => onSell(voucher)}>
                     <Check size={12} /> Vendre
                 </button>
@@ -122,7 +122,7 @@ export default function TicketsTab({
                         <p className="empty-hint">Aucun ticket ne correspond à « {search.trim()} ».</p>
                     ) : results.map(({ voucher, group }) => (
                         <div key={voucher.id} className="hs-result-row">
-                            <CodeChip voucher={voucher} busy={busy} onSell={sellOne} onDelete={deleteOne} />
+                            <CodeChip voucher={voucher} busy={busy} onSell={onSellVoucher ? sellOne : undefined} onDelete={deleteOne} />
                             <span className="empty-hint">{group ? `${groupLabel(group)} · ${formatAmount(group.prix)} F` : ''}</span>
                         </div>
                     ))}
@@ -145,9 +145,12 @@ export default function TicketsTab({
                                         : isLowStock(g) && <span className="badge badge-warning">Stock bas</span>}
                                 </div>
                                 <div className="hs-group-actions">
-                                    <button type="button" className="btn-primary hs-btn-sm" disabled={busy || g.disponibles === 0} onClick={() => onOpenSell(g.key)}>
-                                        <Check size={14} /> Vendre
-                                    </button>
+                                    {/* Vente au comptoir : masquée tant que onOpenSell n'est pas fourni (la vente se fait sur papier et en ligne) */}
+                                    {onOpenSell && (
+                                        <button type="button" className="btn-primary hs-btn-sm" disabled={busy || g.disponibles === 0} onClick={() => onOpenSell(g.key)}>
+                                            <Check size={14} /> Vendre
+                                        </button>
+                                    )}
                                     <button type="button" className="btn-secondary hs-btn-sm" onClick={() => print(g)}>
                                         <Download size={14} /> Imprimer
                                     </button>
@@ -156,7 +159,7 @@ export default function TicketsTab({
                                     </button>
                                     {(isLowStock(g) || g.disponibles === 0) && (
                                         <button type="button" className="btn-secondary hs-btn-sm" onClick={() => onOpenWizard(g.profile_name)}>
-                                            <Plus size={14} /> Recréer des tickets
+                                            <Plus size={14} /> Imprimer d'autres tickets
                                         </button>
                                     )}
                                 </div>
@@ -197,7 +200,7 @@ export default function TicketsTab({
                                             </div>
                                             <div className="hs-codes">
                                                 {(b.vouchers || []).map((v) => (
-                                                    <CodeChip key={v.id} voucher={v} busy={busy} onSell={sellOne} onDelete={deleteOne} />
+                                                    <CodeChip key={v.id} voucher={v} busy={busy} onSell={onSellVoucher ? sellOne : undefined} onDelete={deleteOne} />
                                                 ))}
                                             </div>
                                         </div>

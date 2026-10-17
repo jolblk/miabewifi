@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound, Radio, Ticket } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Zap, X, Copy, MoreVertical, ChevronDown, KeyRound } from 'lucide-react';
 import { useRoutersData } from '../hooks/useRoutersData';
 import { useSearch } from '../context/SearchContext';
 import { stripAccents } from '../utils/normalizeText';
@@ -10,10 +10,14 @@ import './Routers.css';
 import { formatDate } from '../utils/format';
 import { getErrorMessage } from '../utils/errorMessage';
 
-const ROUTERS_TABS = [
-    { key: 'routers', label: 'Mes routeurs', icon: Radio },
-    { key: 'tickets', label: 'Tickets hotspots', icon: Ticket },
-];
+// Titre de la page selon l'adresse : /routers, ou /tickets et sa vue (?vue=...).
+const PAGE_TITLES = {
+    tickets: 'Tickets',
+    live: 'Clients connectés',
+    forfaits: 'Forfaits et prix',
+    wifi: 'Page Wi-Fi',
+    reglages: 'Réglages du hotspot',
+};
 
 // Vue de la page Tickets écrite dans l'adresse (?vue=...) et onglet correspondant :
 // le menu peut ainsi ouvrir directement « Forfaits et prix », « Page Wi-Fi », etc.
@@ -154,27 +158,14 @@ export default function Routers() {
     return (
         <div>
             <div className="section-header">
-                <h1 className="page-title">Routeurs</h1>
+                <h1 className="page-title">
+                    {activeTab === 'tickets' ? PAGE_TITLES[VUE_TO_TAB[searchParams.get('vue')] || 'tickets'] : 'Mes routeurs'}
+                </h1>
                 {activeTab === 'routers' && (
                     <button className="btn-primary" onClick={() => navigate('/routers/nouveau')}>
                         <Plus size={16} /> Ajouter un routeur
                     </button>
                 )}
-            </div>
-
-            <div className="hotspot-tabs">
-                {ROUTERS_TABS.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                        <button
-                            key={tab.key}
-                            className={`hotspot-tab ${activeTab === tab.key ? 'hotspot-tab-active' : ''}`}
-                            onClick={() => setActiveTab(tab.key)}
-                        >
-                            <Icon size={16} /> {tab.label}
-                        </button>
-                    );
-                })}
             </div>
 
             {activeTab === 'tickets' && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Ticket } from 'lucide-react';
+import { Printer, Ticket } from 'lucide-react';
 import { useHotspotDashboard } from '../../hooks/useHotspotDashboard';
 import { confirmDialog } from '../../utils/confirm';
 import { formatAmount } from '../../utils/format';
@@ -15,13 +15,6 @@ import CreateTicketsWizard from './CreateTicketsWizard';
 import { errorMessage, groupBatches, isSameDay, sellableProfiles } from './hotspotUtils';
 import './HotspotTickets.css';
 
-const TABS = [
-    { key: 'tickets', label: 'Mes tickets' },
-    { key: 'forfaits', label: 'Forfaits et prix' },
-    { key: 'wifi', label: 'Page Wi-Fi' },
-    { key: 'live', label: 'En direct' },
-    { key: 'reglages', label: 'Réglages' },
-];
 
 // Page « Tickets hotspots » : chiffres clés, vente rapide, création guidée,
 // et quatre onglets pour séparer le quotidien des réglages.
@@ -139,7 +132,7 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
             <div className="section-card hs-empty">
                 <Ticket size={28} />
                 <h2>Pas encore de routeur</h2>
-                <p className="empty-hint">Ajoutez d'abord un routeur pour pouvoir créer et vendre des tickets.</p>
+                <p className="empty-hint">Ajoutez d'abord un routeur pour pouvoir imprimer et vendre des tickets.</p>
                 {onGoToRouters && <button type="button" className="btn-primary" onClick={onGoToRouters}>Ajouter un routeur</button>}
             </div>
         );
@@ -155,39 +148,26 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
                     statuses={routerStatuses}
                     onGoToRouters={onGoToRouters}
                 />
-                <div className="hs-top-actions">
-                    <button type="button" className="btn-primary" disabled={!selectedRouterId || stats.disponibles === 0} onClick={() => setSellKey(null)}>
-                        <Ticket size={16} /> Vendre un ticket
-                    </button>
-                    <button type="button" className="btn-secondary" disabled={!selectedRouterId} onClick={() => setWizardProfile(null)}>
-                        <Plus size={16} /> Créer des tickets
+                {tab === 'tickets' && (
+                    <div className="hs-top-actions">
+                        <button type="button" className="btn-primary" disabled={!selectedRouterId} onClick={() => setWizardProfile(null)}>
+                            <Printer size={16} /> Imprimer des tickets
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Chiffres clés : seulement sur la vue Tickets (les autres vues ont leur propre page dans le menu) */}
+            {tab === 'tickets' && (
+                <div className="hs-stats">
+                    <div className="hs-stat"><span>Tickets disponibles</span><b>{formatAmount(stats.disponibles)}</b></div>
+                    <div className="hs-stat"><span>Vendus aujourd'hui</span><b>{formatAmount(stats.vendusAujourdhui)}</b></div>
+                    <div className="hs-stat"><span>Recettes du mois</span><b>{formatAmount(stats.recettesMois)} F</b></div>
+                    <button type="button" className="hs-stat hs-stat-btn" onClick={() => changeTab('live')} title="Voir les clients connectés">
+                        <span>Clients connectés</span><b>{connectedClients === null ? '—' : connectedClients}</b>
                     </button>
                 </div>
-            </div>
-
-            <div className="hs-stats">
-                <div className="hs-stat"><span>Tickets disponibles</span><b>{formatAmount(stats.disponibles)}</b></div>
-                <div className="hs-stat"><span>Vendus aujourd'hui</span><b>{formatAmount(stats.vendusAujourdhui)}</b></div>
-                <div className="hs-stat"><span>Recettes du mois</span><b>{formatAmount(stats.recettesMois)} F</b></div>
-                <button type="button" className="hs-stat hs-stat-btn" onClick={() => changeTab('live')} title="Voir les clients connectés">
-                    <span>Clients connectés</span><b>{connectedClients === null ? '—' : connectedClients}</b>
-                </button>
-            </div>
-
-            <div className="hs-tabs" role="tablist">
-                {TABS.map((t) => (
-                    <button
-                        key={t.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={tab === t.key}
-                        className={`hs-tab${tab === t.key ? ' is-on' : ''}`}
-                        onClick={() => changeTab(t.key)}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
+            )}
 
             {actionError && <p className="error-text">{actionError}</p>}
             {actionInfo && <p className="success-text">{actionInfo}</p>}
@@ -201,7 +181,6 @@ export default function HotspotTickets({ onGoToRouters, initialTab, initialReque
                     busy={busy}
                     setBusy={setBusy}
                     onMessage={onMessage}
-                    onOpenSell={(key) => setSellKey(key)}
                     onOpenWizard={(profileName) => setWizardProfile(profileName || null)}
                     onSellVoucher={data.sellVoucher}
                     onDeleteVoucher={data.deleteVoucher}
