@@ -12,7 +12,7 @@ export default function Modal({ title, onClose, children, width = 440 }) {
     }, [onClose]);
 
     return (
-        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="modal-overlay hs-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="modal-box hs-modal" style={{ maxWidth: width }} role="dialog" aria-modal="true" aria-label={title}>
                 <div className="hs-modal-head">
                     <h2>{title}</h2>

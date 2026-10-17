@@ -162,3 +162,42 @@
     .hs-live-left { width: auto; flex: 1 1 120px; }
     .hs-live-data { width: auto; }
 }
+
+/* Impression : prix déjà connu, affiché sur une ligne avec un lien « Modifier » */
+.hs-price-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 14px 0 0;
+    font-size: 14px;
+}
+
+.hs-price-line .hs-link {
+    margin-left: auto;
+}
+
+/* Sur téléphone, les fenêtres des tickets montent du bas de l'écran, avec de gros boutons pour le pouce */
+@media (max-width: 767px) {
+    .hs-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .hs-overlay .hs-modal {
+        max-width: none !important;
+        max-height: 90vh;
+        border-radius: 20px 20px 0 0;
+        padding: 18px 16px 24px;
+    }
+
+    .hs-choice {
+        min-height: 56px;
+        justify-content: center;
+    }
+
+    .hs-modal-actions>button {
+        flex: 1;
+        justify-content: center;
+    }
+}

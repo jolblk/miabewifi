@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Download, Plus } from 'lucide-react';
+import { Check, Download, Plus, Printer } from 'lucide-react';
 import Modal from './Modal';
 import { errorMessage, forfaitTitle, formatQuota, humanDuration, speedLabel } from './hotspotUtils';
 import { formatAmount } from '../../utils/format';
@@ -42,6 +42,8 @@ export default function CreateTicketsWizard({
     const [error, setError] = useState('');
     const [created, setCreated] = useState(null);
     const [online, setOnline] = useState(true);
+    // Le prix n'est redemandé que s'il n'a jamais été enregistré pour ce forfait.
+    const [editPrice, setEditPrice] = useState(!initial.saved);
 
     const sortedProfiles = [...profiles].sort((a, b) => {
         const pa = forfaitSettings.find((s) => s.profile_name === a.name)?.prix ?? Infinity;
@@ -58,6 +60,8 @@ export default function CreateTicketsWizard({
         setValidite(d.validite_jours ? String(d.validite_jours) : '');
         setQuotaValeur(d.quota_mo ? String(d.quota_mo >= 1024 ? d.quota_mo / 1024 : d.quota_mo) : '');
         setQuotaUnite(d.quota_mo && d.quota_mo < 1024 ? 'mo' : 'go');
+        setEditPrice(!d.saved || !d.prix);
+        setError('');
         setStep(2);
     }
 
@@ -90,6 +94,8 @@ export default function CreateTicketsWizard({
             setCreated(batch);
             setOnline(batch?.online_sale !== false);
             setStep(3);
+            // Le PDF se télécharge tout seul ; le bouton de l'étape 3 permet de le récupérer à nouveau.
+            if (batch?.id) onDownload(batch.id).catch(() => {});
         } catch (err) {
             setError(errorMessage(err, 'Impossible de créer les tickets.'));
         } finally {
@@ -109,7 +115,7 @@ export default function CreateTicketsWizard({
     }
 
     return (
-        <Modal title="Créer des tickets" onClose={onClose} width={480}>
+        <Modal title="Imprimer des tickets" onClose={onClose} width={480}>
             <Steps step={step} />
 
             {step === 1 && (
@@ -171,16 +177,27 @@ export default function CreateTicketsWizard({
                         style={{ marginTop: 8 }}
                     />
 
-                    <label className="field-label" htmlFor="hs-wizard-prix" style={{ marginTop: 14 }}>Prix d'un ticket (FCFA)</label>
-                    <input
-                        id="hs-wizard-prix"
-                        className="text-input hs-input-small"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={prix}
-                        onChange={(e) => setPrix(e.target.value)}
-                    />
+                    {editPrice ? (
+                        <>
+                            <label className="field-label" htmlFor="hs-wizard-prix" style={{ marginTop: 14 }}>Prix d'un ticket (FCFA)</label>
+                            <input
+                                id="hs-wizard-prix"
+                                className="text-input hs-input-small"
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                step="1"
+                                value={prix}
+                                onChange={(e) => setPrix(e.target.value)}
+                            />
+                            <p className="empty-hint" style={{ marginTop: 4 }}>Enregistré pour la prochaine fois : vous n'aurez plus à le taper.</p>
+                        </>
+                    ) : (
+                        <p className="hs-price-line">
+                            Prix : <strong>{formatAmount(Number(prix))} F</strong> le ticket
+                            <button type="button" className="hs-link" onClick={() => setEditPrice(true)}>Modifier</button>
+                        </p>
+                    )}
 
                     <p className="empty-hint" style={{ marginTop: 10 }}>
                         {humanDuration(profile?.['session-timeout']) ? `${humanDuration(profile['session-timeout'])} de connexion` : 'Durée définie par le forfait'}
@@ -226,7 +243,7 @@ export default function CreateTicketsWizard({
                     <div className="hs-modal-actions">
                         <button type="button" className="btn-secondary" onClick={() => setStep(1)} disabled={busy}>Retour</button>
                         <button type="button" className="btn-primary" onClick={handleCreate} disabled={busy}>
-                            {busy ? 'Création…' : `Créer ${finalQuantite || ''} tickets`}
+                            <Printer size={16} /> {busy ? 'Préparation…' : `Imprimer ${finalQuantite || ''} tickets`}
                         </button>
                     </div>
                 </>
@@ -234,9 +251,10 @@ export default function CreateTicketsWizard({
 
             {step === 3 && created && (
                 <>
-                    <p className="hs-success-line"><Check size={18} /> 3. C'est prêt : {created.quantite} tickets « {title} » à {formatAmount(created.prix_unitaire)} F.</p>
-                    <button type="button" className="btn-primary hs-wide" onClick={() => onDownload(created.id)}>
-                        <Download size={16} /> Imprimer les tickets (PDF)
+                    <p className="hs-success-line"><Check size={18} /> C'est prêt : {created.quantite} tickets « {title} » à {formatAmount(created.prix_unitaire)} F.</p>
+                    <p className="empty-hint">Le fichier PDF se télécharge : ouvrez-le pour l'imprimer.</p>
+                    <button type="button" className="btn-secondary hs-wide" onClick={() => onDownload(created.id).catch(() => setError('Impossible de télécharger le PDF. Réessayez.'))}>
+                        <Download size={16} /> Télécharger à nouveau le PDF
                     </button>
                     <label className="hs-toggle-line">
                         <input type="checkbox" checked={online} onChange={(e) => toggleOnline(e.target.checked)} />

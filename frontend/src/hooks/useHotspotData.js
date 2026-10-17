@@ -202,7 +202,8 @@ export function useHotspotData() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        window.URL.revokeObjectURL(url);
+        // Libéré un peu plus tard : sur iPhone, le téléchargement démarre après le clic.
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     }
 
     return {
